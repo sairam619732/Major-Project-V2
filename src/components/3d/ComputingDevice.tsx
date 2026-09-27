@@ -246,8 +246,8 @@ export function ComputingDevice() {
     groupRef.current.rotation.y = -0.42 + Math.sin(t * 0.45) * 0.025;
     groupRef.current.rotation.x = 0.12 + Math.cos(t * 0.4) * 0.016;
 
-    // Phase 7.6 Continuous Screen Activation (0.28 -> 0.58 as camera approaches)
-    const activeRaw = Math.max(0, Math.min(1, (p - 0.28) / 0.30));
+    // Continuous Screen Activation (0.18 -> 0.36 as camera approaches tablet)
+    const activeRaw = Math.max(0, Math.min(1, (p - 0.18) / 0.18));
     const activeEased = activeRaw * activeRaw * (3 - 2 * activeRaw);
 
     const pulse = Math.sin(t * 6.0) * 0.14 * activeEased;

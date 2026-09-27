@@ -2,11 +2,13 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
+import * as THREE from "three";
 import { ComputingDevice } from "./ComputingDevice";
 import { SparseDeepSpaceStars } from "./SparseDeepSpaceStars";
 import { ScrollCameraController } from "./ScrollCameraController";
 import { HolographicTask } from "./HolographicTask";
 import { EdgeServer } from "./EdgeServer";
+import { CloudDatacenter } from "./CloudDatacenter";
 
 export function SceneCanvas() {
   const [mounted, setMounted] = useState(false);
@@ -24,7 +26,12 @@ export function SceneCanvas() {
       <Canvas
         camera={{ position: [0, 0, 7.2], fov: 36 }}
         dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: "high-performance" }}
+        gl={{
+          antialias: true,
+          powerPreference: "high-performance",
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.15,
+        }}
       >
         {/* Deep navy-black background */}
         <color attach="background" args={["#02040A"]} />
@@ -35,8 +42,8 @@ export function SceneCanvas() {
         {/* 100-150 custom high-efficiency Points starfield across 3D volume */}
         <SparseDeepSpaceStars />
 
-        {/* Balanced Ambient Environment for clean shadow legibility */}
-        <ambientLight intensity={0.85} color="#1e293b" />
+        {/* Balanced Ambient Environment for clean shadow legibility across all sections */}
+        <ambientLight intensity={1.1} color="#334155" />
 
         {/* Brighter Soft Neutral Key Light (Top-Front-Right) */}
         <directionalLight
@@ -88,6 +95,8 @@ export function SceneCanvas() {
           <HolographicTask />
           {/* Distributed Edge Server computing pod */}
           <EdgeServer />
+          {/* Centralized Cloud Datacenter infrastructure */}
+          <CloudDatacenter />
         </Suspense>
       </Canvas>
     </div>

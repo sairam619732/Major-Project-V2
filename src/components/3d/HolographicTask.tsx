@@ -43,22 +43,42 @@ export function HolographicTask() {
   const edgeTargetY = 0.65;
   const edgeTargetZ = -0.25;
 
-  // Phase 7.5: Continuous 3D CatmullRom spline connecting Local hover -> Lift -> Arc -> Edge server
-  // Sampled continuously using transition progress u
+  // Destination coordinates settled in front of the Cloud datacenter
+  const cloudTargetX = 14.65;
+  const cloudTargetY = 0.85;
+  const cloudTargetZ = -1.50;
+
+  // Segment 1: Continuous 3D CatmullRom spline connecting Local hover -> Lift -> Arc -> Edge server
   const trajectoryCurve = useMemo(() => {
     return new THREE.CatmullRomCurve3(
       [
         new THREE.Vector3(localHoverX, localHoverY, localHoverZ), // START: near tablet
-        new THREE.Vector3(deviceX - 0.50, deviceY + 1.45, 0.45),  // CONTROL 1: slightly forward and upward (lift)
-        new THREE.Vector3(deviceX + 1.80, deviceY + 2.10, 0.60),  // CONTROL 2: farther into the scene (arc)
+        new THREE.Vector3(deviceX - 0.50, deviceY + 1.45, 0.45),  // CONTROL 1: lift
+        new THREE.Vector3(deviceX + 1.80, deviceY + 2.10, 0.60),  // CONTROL 2: arc
         new THREE.Vector3(6.20, 1.40, 0.10),                     // CONTROL 3: toward Edge
         new THREE.Vector3(edgeTargetX, edgeTargetY, edgeTargetZ), // END: Edge server
       ],
-      false, // open curve
-      "centripetal", // smooth without self-intersection
-      0.5 // tension
+      false,
+      "centripetal",
+      0.5
     );
   }, [deviceX, deviceY, localHoverX, localHoverY, localHoverZ, edgeTargetX, edgeTargetY, edgeTargetZ]);
+
+  // Segment 2: Continuous 3D CatmullRom spline connecting Edge -> High Arc -> Remote Cloud datacenter
+  const trajectoryCurve2 = useMemo(() => {
+    return new THREE.CatmullRomCurve3(
+      [
+        new THREE.Vector3(edgeTargetX, edgeTargetY, edgeTargetZ), // START: at Edge server
+        new THREE.Vector3(edgeTargetX + 1.80, 1.70, 0.10),        // CONTROL 1: lift into deep space
+        new THREE.Vector3(11.60, 2.20, -0.60),                   // CONTROL 2: apex of WAN cloud offload
+        new THREE.Vector3(13.60, 1.45, -1.20),                   // CONTROL 3: descent to datacenter
+        new THREE.Vector3(cloudTargetX, cloudTargetY, cloudTargetZ), // END: Cloud datacenter
+      ],
+      false,
+      "centripetal",
+      0.5
+    );
+  }, [edgeTargetX, edgeTargetY, edgeTargetZ, cloudTargetX, cloudTargetY, cloudTargetZ]);
 
   // Smooth Hermite interpolation helpers
   const smoothstep = (min: number, max: number, value: number) => {
@@ -161,10 +181,10 @@ export function HolographicTask() {
     []
   );
 
-  // 7. Network Data Trail Line (Thin luminous path with controlled blue -> emerald transition)
+  // 7A. Segment 1 Network Data Trail Line (Device -> Edge: Cyan -> Emerald)
   const [trailLineGeo, trailLineMaterial] = useMemo(() => {
     const points = trajectoryCurve.getPoints(120);
-    const count = points.length; // 121 points
+    const count = points.length;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
 
@@ -199,13 +219,76 @@ export function HolographicTask() {
     return [geo, mat];
   }, [trajectoryCurve]);
 
-  // Memoized Three.js Line object for the data trail
   const trailLine = useMemo(() => {
     return new THREE.Line(trailLineGeo, trailLineMaterial);
   }, [trailLineGeo, trailLineMaterial]);
 
-  // 8. Flowing Network Quanta Particles streaming along the data trail
+  // 7B. Segment 2 Network Data Trail Line (Edge -> Cloud: Emerald -> Violet)
+  const [trailLine2Geo, trailLine2Material] = useMemo(() => {
+    const points = trajectoryCurve2.getPoints(120);
+    const count = points.length;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+
+    const emerald = new THREE.Color("#10b981");
+    const violet = new THREE.Color("#8b5cf6");
+    const tempCol = new THREE.Color();
+
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = points[i].x;
+      positions[i * 3 + 1] = points[i].y;
+      positions[i * 3 + 2] = points[i].z;
+
+      const frac = i / (count - 1);
+      tempCol.copy(emerald).lerp(violet, frac);
+      colors[i * 3] = tempCol.r;
+      colors[i * 3 + 1] = tempCol.g;
+      colors[i * 3 + 2] = tempCol.b;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      linewidth: 1,
+    });
+
+    return [geo, mat];
+  }, [trajectoryCurve2]);
+
+  const trailLine2 = useMemo(() => {
+    return new THREE.Line(trailLine2Geo, trailLine2Material);
+  }, [trailLine2Geo, trailLine2Material]);
+
+  // 8A. Flowing Network Quanta Particles along Segment 1
   const [quantaGeo, quantaMaterial] = useMemo(() => {
+    const count = 36;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 0.034,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+    });
+
+    return [geo, mat];
+  }, []);
+
+  // 8B. Flowing Network Quanta Particles along Segment 2
+  const quanta2Ref = useRef<Points>(null);
+  const [quanta2Geo, quanta2Material] = useMemo(() => {
     const count = 36;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
@@ -248,6 +331,9 @@ export function HolographicTask() {
       emerald: new THREE.Color("#10b981"),
       emeraldEmissive: new THREE.Color("#059669"),
       ringEmerald: new THREE.Color("#34d399"),
+      violet: new THREE.Color("#8b5cf6"),
+      violetEmissive: new THREE.Color("#6d28d9"),
+      ringViolet: new THREE.Color("#a78bfa"),
       temp: new THREE.Color(),
       tempVec: new THREE.Vector3(),
     };
@@ -257,19 +343,22 @@ export function HolographicTask() {
   const curPos = useRef(new THREE.Vector3());
 
   useFrame((state, delta) => {
-    // Phase 7.6: Single master visual timeline p in [0, 1]
+    // Single master visual timeline p in [0, 1]
     const p = Math.min(Math.max(scrollState.visualProgress, 0), 1);
     const t = state.clock.getElapsedTime();
 
-    // 1. Task Materialization & Rise (Section 6: 0.55 -> 0.72)
-    const matT = smoothstep(0.55, 0.70, p);
+    // 1. Task Materialization & Rise on Local Tablet (0.30 -> 0.44)
+    const matT = smoothstep(0.30, 0.44, p);
 
     if (matT <= 0.002) {
       if (groupRef.current) groupRef.current.visible = false;
       if (tetherRef.current) tetherRef.current.visible = false;
       if (trailLineGeo) trailLineGeo.setDrawRange(0, 0);
+      if (trailLine2Geo) trailLine2Geo.setDrawRange(0, 0);
       trailLineMaterial.opacity = 0;
+      trailLine2Material.opacity = 0;
       quantaMaterial.opacity = 0;
+      quanta2Material.opacity = 0;
       updateTaskStatus("idle");
       return;
     }
@@ -286,69 +375,120 @@ export function HolographicTask() {
     ringMaterial.opacity = 0.55 * matT;
     particleMaterial.opacity = 0.85 * matT;
 
-    // 2. Position: Continuous rise (0.55 -> 0.70) then continuous 3D Spline transit (0.70 -> 0.94)
-    // Section 7: transitProgress = smoothstep(0.70, 0.94, p)
-    const transitProgress = smoothstep(0.70, 0.94, p);
+    // 2. Position & Color: 3-Stage Cinematic Journey
+    // Stage 1: Local Rise (0.30 -> 0.44)
+    // Stage 2: Transit to Edge (0.44 -> 0.60)
+    // Stage 3: Settle at Edge (0.60 -> 0.72)
+    // Stage 4: Transit to Cloud (0.72 -> 0.88)
+    // Stage 5: Settle at Cloud (0.88 -> 1.00)
 
-    if (p < 0.70) {
-      // Materializing and gently rising from tablet screen surface up to localHover
-      const riseT = smoothstep(0.55, 0.70, p);
+    const transit1 = smoothstep(0.44, 0.60, p);
+    const transit2 = smoothstep(0.72, 0.88, p);
+    const edgeHold = smoothstep(0.60, 0.72, p);
+    const cloudSettle = smoothstep(0.88, 0.95, p);
+
+    if (p < 0.44) {
+      // Local rise from tablet surface
+      const riseT = smoothstep(0.30, 0.44, p);
       curPos.current.set(
         THREE.MathUtils.lerp(originX, localHoverX, riseT),
         THREE.MathUtils.lerp(originY, localHoverY, riseT),
         THREE.MathUtils.lerp(originZ, localHoverZ, riseT)
       );
+      // Cyan palette
+      coreMaterial.color.copy(colors.cyan);
+      cageMaterial.color.copy(colors.cyan);
+      particleMaterial.color.copy(colors.cyan);
+      coreMaterial.emissive.copy(colors.blueEmissive);
+      ringMaterial.color.copy(colors.ringCyan);
+      if (pointLightRef.current) {
+        pointLightRef.current.color.copy(colors.cyan);
+        pointLightRef.current.intensity = 1.8 * matT;
+      }
+    } else if (p < 0.72) {
+      // Segment 1: Local -> Edge
+      trajectoryCurve.getPoint(transit1, curPos.current);
+
+      // Cyan -> Emerald transition
+      colors.temp.copy(colors.cyan).lerp(colors.emerald, transit1);
+      coreMaterial.color.copy(colors.temp);
+      cageMaterial.color.copy(colors.temp);
+      particleMaterial.color.copy(colors.temp);
+
+      colors.temp.copy(colors.blueEmissive).lerp(colors.emeraldEmissive, transit1);
+      coreMaterial.emissive.copy(colors.temp);
+
+      colors.temp.copy(colors.ringCyan).lerp(colors.ringEmerald, transit1);
+      ringMaterial.color.copy(colors.temp);
+
+      // Edge processing pulse synchronization
+      const syncPulse = Math.sin(t * 3.5);
+      coreMaterial.emissiveIntensity = 2.2 + 0.6 * edgeHold + syncPulse * 0.35 * edgeHold;
+
+      if (pointLightRef.current) {
+        pointLightRef.current.color.copy(colors.temp);
+        pointLightRef.current.intensity = 1.8 * matT + 0.5 * edgeHold + syncPulse * 0.45 * edgeHold;
+      }
     } else {
-      // Continuous 3D transit along CatmullRom spline
-      trajectoryCurve.getPoint(transitProgress, curPos.current);
+      // Segment 2: Edge -> Cloud
+      trajectoryCurve2.getPoint(transit2, curPos.current);
+
+      // Emerald -> Violet transition
+      colors.temp.copy(colors.emerald).lerp(colors.violet, transit2);
+      coreMaterial.color.copy(colors.temp);
+      cageMaterial.color.copy(colors.temp);
+      particleMaterial.color.copy(colors.temp);
+
+      colors.temp.copy(colors.emeraldEmissive).lerp(colors.violetEmissive, transit2);
+      coreMaterial.emissive.copy(colors.temp);
+
+      colors.temp.copy(colors.ringEmerald).lerp(colors.ringViolet, transit2);
+      ringMaterial.color.copy(colors.temp);
+
+      // Cloud processing pulse synchronization
+      const cloudSyncPulse = Math.sin(t * 3.2);
+      coreMaterial.emissiveIntensity = 2.2 + 0.7 * cloudSettle + cloudSyncPulse * 0.40 * cloudSettle;
+
+      if (pointLightRef.current) {
+        pointLightRef.current.color.copy(colors.temp);
+        pointLightRef.current.intensity = 1.8 * matT + 0.6 * cloudSettle + cloudSyncPulse * 0.50 * cloudSettle;
+      }
     }
 
-    // Continuous floating oscillations that blend seamlessly based on transitProgress
-    const hoverFloatY = Math.sin(t * 1.6) * 0.03 * (1 - transitProgress);
-    const hoverFloatX = Math.cos(t * 1.2) * 0.015 * (1 - transitProgress);
-    const edgeFloatY = Math.sin(t * 1.8) * 0.02 * transitProgress;
-    const edgeFloatX = Math.cos(t * 1.3) * 0.012 * transitProgress;
+    // Continuous floating oscillations that blend seamlessly based on progress
+    const hoverFloatY = Math.sin(t * 1.6) * 0.03 * (1 - transit1);
+    const hoverFloatX = Math.cos(t * 1.2) * 0.015 * (1 - transit1);
+    const edgeFloatY = Math.sin(t * 1.8) * 0.02 * (transit1 * (1 - transit2));
+    const edgeFloatX = Math.cos(t * 1.3) * 0.012 * (transit1 * (1 - transit2));
+    const cloudFloatY = Math.sin(t * 1.5) * 0.022 * cloudSettle;
+    const cloudFloatX = Math.cos(t * 1.1) * 0.014 * cloudSettle;
 
-    curPos.current.x += hoverFloatX + edgeFloatX;
-    curPos.current.y += hoverFloatY + edgeFloatY;
+    curPos.current.x += hoverFloatX + edgeFloatX + cloudFloatX;
+    curPos.current.y += hoverFloatY + edgeFloatY + cloudFloatY;
 
     if (groupRef.current) {
       groupRef.current.position.copy(curPos.current);
     }
 
-    // Continuous status mapping
-    if (p < 0.55) {
+    // Continuous status mapping across all 3 computing tiers
+    if (p < 0.30) {
       updateTaskStatus("idle");
-    } else if (p < 0.70) {
+    } else if (p < 0.44) {
       updateTaskStatus("generated");
-    } else if (p < 0.94) {
+    } else if (p < 0.60) {
+      updateTaskStatus("in_transit");
+    } else if (p < 0.72) {
+      updateTaskStatus("processing");
+    } else if (p < 0.88) {
       updateTaskStatus("in_transit");
     } else {
-      updateTaskStatus("completed");
-    }
-
-    // 3. Continuous Color Transition along Spline Transit (Cyan -> Emerald)
-    colors.temp.copy(colors.cyan).lerp(colors.emerald, transitProgress);
-    coreMaterial.color.copy(colors.temp);
-    cageMaterial.color.copy(colors.temp);
-    particleMaterial.color.copy(colors.temp);
-
-    colors.temp.copy(colors.blueEmissive).lerp(colors.emeraldEmissive, transitProgress);
-    coreMaterial.emissive.copy(colors.temp);
-
-    colors.temp.copy(colors.ringCyan).lerp(colors.ringEmerald, transitProgress);
-    ringMaterial.color.copy(colors.temp);
-
-    if (pointLightRef.current) {
-      colors.temp.copy(colors.cyan).lerp(colors.emerald, transitProgress);
-      pointLightRef.current.color.copy(colors.temp);
-      pointLightRef.current.intensity = 1.8 * matT + (transitProgress >= 0.95 ? Math.sin(t * 4.0) * 0.4 : 0);
+      updateTaskStatus("processing");
     }
 
     // 4. Optical Projection Tether to Local Tablet:
-    // Fades in with task materialization, dissolves as task lifts off (0.70–0.78)
+    // Fades in with task materialization on tablet, dissolves cleanly on liftoff (0.44 - 0.50)
     if (tetherRef.current) {
-      const tetherT = smoothstep(0.55, 0.65, p) * (1 - smoothstep(0.70, 0.78, p));
+      const tetherT = smoothstep(0.30, 0.40, p) * (1 - smoothstep(0.44, 0.50, p));
       if (tetherT > 0.01) {
         tetherRef.current.visible = true;
         tetherRef.current.position.set(originX, originY, originZ);
@@ -366,7 +506,7 @@ export function HolographicTask() {
     }
 
     // Continuous rotation of task core & rings
-    const rotSpeed = 1.0 + smoothstep(0.70, 0.85, p) * (1 - smoothstep(0.90, 0.98, p)) * 0.8;
+    const rotSpeed = 1.0 + (smoothstep(0.44, 0.55, p) * (1 - smoothstep(0.60, 0.70, p)) + smoothstep(0.72, 0.82, p) * (1 - smoothstep(0.88, 0.96, p))) * 0.7;
     if (coreRef.current) {
       coreRef.current.rotation.y += delta * 0.45 * rotSpeed;
       coreRef.current.rotation.x += delta * 0.22 * rotSpeed;
@@ -383,30 +523,28 @@ export function HolographicTask() {
       particlesRef.current.rotation.x += delta * 0.14 * rotSpeed;
     }
 
-    // 5. Continuous Network Signal Trail & Streaming Data Quanta (Section 8)
-    // Trail growth uses exact same transitProgress: trailEnd = transitProgress
+    // 5A. Segment 1 Network Signal Trail & Quanta (Device -> Edge)
     if (trailLineGeo && quantaGeo) {
-      const trailOpacity = smoothstep(0.70, 0.78, p);
-      if (trailOpacity > 0.01 && transitProgress > 0.005) {
-        trailLineMaterial.opacity = 0.65 * trailOpacity;
-        quantaMaterial.opacity = 0.80 * trailOpacity;
+      const trail1Opacity = smoothstep(0.44, 0.50, p);
+      if (trail1Opacity > 0.01 && transit1 > 0.005) {
+        const trail1Settle = smoothstep(0.60, 0.70, p);
+        const trail1Alpha = THREE.MathUtils.lerp(0.65, 0.24, trail1Settle) * trail1Opacity;
+        trailLineMaterial.opacity = trail1Alpha;
+        quantaMaterial.opacity = THREE.MathUtils.lerp(0.80, 0.32, trail1Settle) * trail1Opacity;
 
-        // Path exists progressively strictly behind the traveling task:
-        const drawCount = Math.max(2, Math.floor(transitProgress * 120) + 1);
-        trailLineGeo.setDrawRange(0, drawCount);
+        const drawCount1 = Math.max(2, Math.floor(transit1 * 120) + 1);
+        trailLineGeo.setDrawRange(0, drawCount1);
 
-        // Streaming data particles flow along the traversed path behind the task:
         const posArr = quantaGeo.attributes.position.array as Float32Array;
         const colArr = quantaGeo.attributes.color.array as Float32Array;
+        const streamSpeed1 = THREE.MathUtils.lerp(0.40, 0.14, trail1Settle);
 
         for (let j = 0; j < 36; j++) {
           const offset = j / 36;
-          const cycle = (t * 0.40 + offset) % 1.0;
-          // Constrain particles to the traversed portion of the curve [0, transitProgress]
-          const particleT = cycle * transitProgress;
+          const cycle = (t * streamSpeed1 + offset) % 1.0;
+          const particleT = cycle * transit1;
           trajectoryCurve.getPoint(particleT, colors.tempVec);
 
-          // Subtle micro-jitter for organic data stream
           const jitter = Math.sin(t * 4.0 + j * 1.5) * 0.012;
           posArr[j * 3] = colors.tempVec.x;
           posArr[j * 3 + 1] = colors.tempVec.y + jitter;
@@ -426,6 +564,48 @@ export function HolographicTask() {
         trailLineGeo.setDrawRange(0, 0);
       }
     }
+
+    // 5B. Segment 2 Network Signal Trail & Quanta (Edge -> Cloud)
+    if (trailLine2Geo && quanta2Geo) {
+      const trail2Opacity = smoothstep(0.72, 0.78, p);
+      if (trail2Opacity > 0.01 && transit2 > 0.005) {
+        const trail2Settle = smoothstep(0.88, 0.96, p);
+        const trail2Alpha = THREE.MathUtils.lerp(0.65, 0.24, trail2Settle) * trail2Opacity;
+        trailLine2Material.opacity = trail2Alpha;
+        quanta2Material.opacity = THREE.MathUtils.lerp(0.80, 0.32, trail2Settle) * trail2Opacity;
+
+        const drawCount2 = Math.max(2, Math.floor(transit2 * 120) + 1);
+        trailLine2Geo.setDrawRange(0, drawCount2);
+
+        const posArr2 = quanta2Geo.attributes.position.array as Float32Array;
+        const colArr2 = quanta2Geo.attributes.color.array as Float32Array;
+        const streamSpeed2 = THREE.MathUtils.lerp(0.40, 0.14, trail2Settle);
+
+        for (let j = 0; j < 36; j++) {
+          const offset = j / 36;
+          const cycle = (t * streamSpeed2 + offset) % 1.0;
+          const particleT = cycle * transit2;
+          trajectoryCurve2.getPoint(particleT, colors.tempVec);
+
+          const jitter = Math.sin(t * 4.0 + j * 1.5) * 0.012;
+          posArr2[j * 3] = colors.tempVec.x;
+          posArr2[j * 3 + 1] = colors.tempVec.y + jitter;
+          posArr2[j * 3 + 2] = colors.tempVec.z;
+
+          colors.temp.copy(colors.emerald).lerp(colors.violet, particleT);
+          colArr2[j * 3] = colors.temp.r;
+          colArr2[j * 3 + 1] = colors.temp.g;
+          colArr2[j * 3 + 2] = colors.temp.b;
+        }
+
+        quanta2Geo.attributes.position.needsUpdate = true;
+        quanta2Geo.attributes.color.needsUpdate = true;
+      } else {
+        trailLine2Material.opacity = 0;
+        quanta2Material.opacity = 0;
+        trailLine2Geo.setDrawRange(0, 0);
+      }
+    }
   });
 
   return (
@@ -438,14 +618,24 @@ export function HolographicTask() {
         position={[originX, originY, originZ]}
       />
 
-      {/* 2. Thin Luminous Network Data Trail Path (Blue -> Emerald) */}
+      {/* 2A. Luminous Network Data Trail Path 1 (Local -> Edge: Blue -> Emerald) */}
       <primitive object={trailLine} />
 
-      {/* 3. Streaming Network Data Quanta Particles */}
+      {/* 2B. Luminous Network Data Trail Path 2 (Edge -> Cloud: Emerald -> Violet) */}
+      <primitive object={trailLine2} />
+
+      {/* 3A. Streaming Network Data Quanta along Segment 1 */}
       <points
         ref={quantaRef}
         geometry={quantaGeo}
         material={quantaMaterial}
+      />
+
+      {/* 3B. Streaming Network Data Quanta along Segment 2 */}
+      <points
+        ref={quanta2Ref}
+        geometry={quanta2Geo}
+        material={quanta2Material}
       />
 
       {/* 4. Floating Holographic Task Assembly (Continuous 3D Spline Movement) */}
@@ -478,12 +668,12 @@ export function HolographicTask() {
           material={particleMaterial}
         />
 
-        {/* Restrained localized point light transitioning from cyan to emerald */}
+        {/* Restrained localized point light transitioning with computing tier */}
         <pointLight
           ref={pointLightRef}
           color="#38bdf8"
           intensity={1.8}
-          distance={2.6}
+          distance={2.8}
           decay={2}
         />
       </group>
