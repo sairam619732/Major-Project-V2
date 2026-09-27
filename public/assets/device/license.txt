@@ -1,0 +1,11 @@
+Model Information:
+* title:	Sci-fi Tablet
+* source:	https://sketchfab.com/3d-models/sci-fi-tablet-d201a35d53f745b0a967796b0f8884ab
+* author:	NoobiePie (https://sketchfab.com/NoobiePie)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Sci-fi Tablet" (https://sketchfab.com/3d-models/sci-fi-tablet-d201a35d53f745b0a967796b0f8884ab) by NoobiePie (https://sketchfab.com/NoobiePie) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
