@@ -9,6 +9,7 @@ import { ScrollCameraController } from "./ScrollCameraController";
 import { HolographicTask } from "./HolographicTask";
 import { EdgeServer } from "./EdgeServer";
 import { CloudDatacenter } from "./CloudDatacenter";
+import { CosmicTransition } from "./CosmicTransition";
 
 export function SceneCanvas() {
   const [mounted, setMounted] = useState(false);
@@ -97,6 +98,8 @@ export function SceneCanvas() {
           <EdgeServer />
           {/* Centralized Cloud Datacenter infrastructure */}
           <CloudDatacenter />
+          {/* Subtle cosmic constellation transition in Edge -> Cloud WAN corridor */}
+          <CosmicTransition />
         </Suspense>
       </Canvas>
     </div>
