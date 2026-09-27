@@ -121,16 +121,16 @@ export function ScrollCameraController() {
           THREE.MathUtils.lerp(-1.40, -1.55, t)
         );
       } else {
-        // 8. DECISION OFFLOADING SECTION (Phase 10.1): Camera glides to dedicated centered Decision composition
+        // 8. DECISION OFFLOADING SECTION (Phase 10.2.2): Intimate framing for balanced, readable candidate assets
         const tDec = smoothstep(1.00, 1.20, fullP);
         targetPos.current.set(
-          THREE.MathUtils.lerp(13.45, 25.70, tDec),
-          THREE.MathUtils.lerp(2.20, 0.45, tDec),
-          THREE.MathUtils.lerp(4.65, 6.40, tDec)
+          THREE.MathUtils.lerp(13.45, 26.00, tDec),
+          THREE.MathUtils.lerp(2.20, 0.50, tDec),
+          THREE.MathUtils.lerp(4.65, 5.75, tDec)
         );
         targetLook.current.set(
           THREE.MathUtils.lerp(15.35, 26.00, tDec),
-          THREE.MathUtils.lerp(0.20, 0.45, tDec),
+          THREE.MathUtils.lerp(0.20, 0.50, tDec),
           THREE.MathUtils.lerp(-1.55, 0.00, tDec)
         );
       }
@@ -212,12 +212,12 @@ export function ScrollCameraController() {
         const tDec = smoothstep(1.00, 1.20, fullP);
         targetPos.current.set(
           THREE.MathUtils.lerp(13.80, 26.00, tDec),
-          THREE.MathUtils.lerp(0.90, 0.40, tDec),
-          THREE.MathUtils.lerp(5.20, 8.40, tDec)
+          THREE.MathUtils.lerp(0.90, 0.50, tDec),
+          THREE.MathUtils.lerp(5.20, 7.50, tDec)
         );
         targetLook.current.set(
           THREE.MathUtils.lerp(15.20, 26.00, tDec),
-          THREE.MathUtils.lerp(0.15, 0.40, tDec),
+          THREE.MathUtils.lerp(0.15, 0.50, tDec),
           THREE.MathUtils.lerp(-1.50, 0.00, tDec)
         );
       }

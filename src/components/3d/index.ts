@@ -6,3 +6,5 @@ export * from "./HolographicTask";
 export * from "./EdgeServer";
 export * from "./CloudDatacenter";
 export * from "./CosmicTransition";
+export * from "./CloudToDecisionCosmic";
+export * from "./DecisionVisualization";
