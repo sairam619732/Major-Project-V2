@@ -5,3 +5,4 @@ export * from "./ScrollCameraController";
 export * from "./HolographicTask";
 export * from "./EdgeServer";
 export * from "./CloudDatacenter";
+export * from "./CosmicTransition";
