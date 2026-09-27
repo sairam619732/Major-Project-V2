@@ -2,6 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { subscribeScroll } from "@/store/scrollStore";
+import {
+  evaluateOffloadingDecision,
+  DEFAULT_TASK,
+  DEFAULT_DEVICE,
+  DEFAULT_EDGE,
+  DEFAULT_CLOUD,
+} from "@/lib/offloading/decisionEngine";
 
 function smoothstep(min: number, max: number, value: number) {
   const x = Math.max(0, Math.min(1, (value - min) / (max - min)));
@@ -25,6 +32,26 @@ export function StorySections() {
   const cloudTitleRef = useRef<HTMLDivElement>(null);
   const cloudDescRef = useRef<HTMLDivElement>(null);
   const cloudTeleRef = useRef<HTMLDivElement>(null);
+
+  // Phase 10 Decision Offloading Engine Refs
+  const decisionContainerRef = useRef<HTMLDivElement>(null);
+  const decisionTitleRef = useRef<HTMLDivElement>(null);
+  const decisionDescRef = useRef<HTMLDivElement>(null);
+  const decisionTaskRef = useRef<HTMLDivElement>(null);
+  const decisionReasonRef = useRef<HTMLDivElement>(null);
+
+  const candidateCardsContainerRef = useRef<HTMLDivElement>(null);
+  const localCardRef = useRef<HTMLDivElement>(null);
+  const edgeCardRef = useRef<HTMLDivElement>(null);
+  const cloudCardRef = useRef<HTMLDivElement>(null);
+
+  // Deterministic evaluation of simulated benchmark state
+  const decisionResult = evaluateOffloadingDecision(
+    DEFAULT_TASK,
+    DEFAULT_DEVICE,
+    DEFAULT_EDGE,
+    DEFAULT_CLOUD
+  );
 
   // Phase 7.6 Editorial Column Specifications:
   // position: fixed relative to the scene viewport
@@ -148,18 +175,23 @@ export function StorySections() {
         edgeTeleRef.current.style.filter = `blur(${edgeTeleBlur.toFixed(1)}px)`;
       }
 
-      // 4. CLOUD CONTENT (Reveals 0.84 -> 0.96)
+      // 4. CLOUD CONTENT (Reveals 0.84 -> 0.96, exits 1.00 -> 1.08 as scroll enters Decision)
+      const cloudExit = smoothstep(1.00, 1.08, p);
+
       if (cloudContainerRef.current) {
-        cloudContainerRef.current.style.pointerEvents = p >= 0.82 ? "auto" : "none";
+        cloudContainerRef.current.style.opacity = (1 - cloudExit).toFixed(3);
+        cloudContainerRef.current.style.pointerEvents =
+          p >= 0.82 && cloudExit < 0.85 ? "auto" : "none";
       }
 
       // 4A. CLOUD TITLE ("CLOUD COMPUTING" - 0.84 -> 0.92)
       if (cloudTitleRef.current) {
         const cloudT = smoothstep(0.84, 0.92, p);
-        const cloudTitleY = (1 - cloudT) * 30;
-        const cloudTitleBlur = (1 - cloudT) * 8;
+        const cloudOpacity = cloudT * (1 - cloudExit);
+        const cloudTitleY = (1 - cloudT) * 30 - cloudExit * 20;
+        const cloudTitleBlur = (1 - cloudT) * 8 + cloudExit * 4;
 
-        cloudTitleRef.current.style.opacity = cloudT.toFixed(3);
+        cloudTitleRef.current.style.opacity = cloudOpacity.toFixed(3);
         cloudTitleRef.current.style.transform = `translate3d(0, ${cloudTitleY.toFixed(1)}px, 0)`;
         cloudTitleRef.current.style.filter = `blur(${cloudTitleBlur.toFixed(1)}px)`;
       }
@@ -167,10 +199,11 @@ export function StorySections() {
       // 4B. CLOUD DESCRIPTION (0.86 -> 0.94)
       if (cloudDescRef.current) {
         const cloudDescT = smoothstep(0.86, 0.94, p);
-        const cloudDescY = (1 - cloudDescT) * 25;
-        const cloudDescBlur = (1 - cloudDescT) * 6;
+        const cloudDescOpacity = cloudDescT * (1 - cloudExit);
+        const cloudDescY = (1 - cloudDescT) * 25 - cloudExit * 20;
+        const cloudDescBlur = (1 - cloudDescT) * 6 + cloudExit * 4;
 
-        cloudDescRef.current.style.opacity = cloudDescT.toFixed(3);
+        cloudDescRef.current.style.opacity = cloudDescOpacity.toFixed(3);
         cloudDescRef.current.style.transform = `translate3d(0, ${cloudDescY.toFixed(1)}px, 0)`;
         cloudDescRef.current.style.filter = `blur(${cloudDescBlur.toFixed(1)}px)`;
       }
@@ -178,12 +211,79 @@ export function StorySections() {
       // 4C. CLOUD TELEMETRY BLOCK (0.88 -> 0.96)
       if (cloudTeleRef.current) {
         const cloudTeleT = smoothstep(0.88, 0.96, p);
-        const cloudTeleY = (1 - cloudTeleT) * 20;
-        const cloudTeleBlur = (1 - cloudTeleT) * 4;
+        const cloudTeleOpacity = cloudTeleT * (1 - cloudExit);
+        const cloudTeleY = (1 - cloudTeleT) * 20 - cloudExit * 20;
+        const cloudTeleBlur = (1 - cloudTeleT) * 4 + cloudExit * 4;
 
-        cloudTeleRef.current.style.opacity = cloudTeleT.toFixed(3);
+        cloudTeleRef.current.style.opacity = cloudTeleOpacity.toFixed(3);
         cloudTeleRef.current.style.transform = `translate3d(0, ${cloudTeleY.toFixed(1)}px, 0)`;
         cloudTeleRef.current.style.filter = `blur(${cloudTeleBlur.toFixed(1)}px)`;
+      }
+
+      // 5. DECISION CONTENT (Phase 10: Reveals 1.06 -> 1.18, evaluates 1.20 -> 1.34)
+      const decT = smoothstep(1.06, 1.18, p);
+      const evalT = smoothstep(1.20, 1.34, p);
+
+      if (decisionContainerRef.current) {
+        decisionContainerRef.current.style.opacity = decT.toFixed(3);
+        decisionContainerRef.current.style.pointerEvents = decT > 0.1 ? "auto" : "none";
+      }
+
+      if (decisionTitleRef.current) {
+        const titleY = (1 - decT) * 30;
+        const titleBlur = (1 - decT) * 8;
+        decisionTitleRef.current.style.opacity = decT.toFixed(3);
+        decisionTitleRef.current.style.transform = `translate3d(0, ${titleY.toFixed(1)}px, 0)`;
+        decisionTitleRef.current.style.filter = `blur(${titleBlur.toFixed(1)}px)`;
+      }
+
+      if (decisionDescRef.current) {
+        const descT = smoothstep(1.08, 1.20, p);
+        const descY = (1 - descT) * 25;
+        const descBlur = (1 - descT) * 6;
+        decisionDescRef.current.style.opacity = descT.toFixed(3);
+        decisionDescRef.current.style.transform = `translate3d(0, ${descY.toFixed(1)}px, 0)`;
+        decisionDescRef.current.style.filter = `blur(${descBlur.toFixed(1)}px)`;
+      }
+
+      if (decisionTaskRef.current) {
+        const taskT = smoothstep(1.12, 1.24, p);
+        const taskY = (1 - taskT) * 20;
+        const taskBlur = (1 - taskT) * 4;
+        decisionTaskRef.current.style.opacity = taskT.toFixed(3);
+        decisionTaskRef.current.style.transform = `translate3d(0, ${taskY.toFixed(1)}px, 0)`;
+        decisionTaskRef.current.style.filter = `blur(${taskBlur.toFixed(1)}px)`;
+      }
+
+      if (decisionReasonRef.current) {
+        const reasonY = (1 - evalT) * 15;
+        const reasonBlur = (1 - evalT) * 4;
+        decisionReasonRef.current.style.opacity = evalT.toFixed(3);
+        decisionReasonRef.current.style.transform = `translate3d(0, ${reasonY.toFixed(1)}px, 0)`;
+        decisionReasonRef.current.style.filter = `blur(${reasonBlur.toFixed(1)}px)`;
+      }
+
+      // Right Candidate Cards Column
+      if (candidateCardsContainerRef.current) {
+        const cardsT = smoothstep(1.08, 1.20, p);
+        candidateCardsContainerRef.current.style.opacity = cardsT.toFixed(3);
+        candidateCardsContainerRef.current.style.pointerEvents = cardsT > 0.1 ? "auto" : "none";
+        candidateCardsContainerRef.current.style.transform = `translate3d(0, calc(-50% + ${(1 - cardsT) * 30}px), 0)`;
+        candidateCardsContainerRef.current.style.filter = `blur(${(1 - cardsT) * 6}px)`;
+      }
+
+      // Candidate Card Highlights when evaluated
+      if (localCardRef.current) {
+        localCardRef.current.style.opacity = (1 - evalT * 0.35).toFixed(3);
+      }
+      if (edgeCardRef.current) {
+        edgeCardRef.current.style.borderColor =
+          evalT > 0.5 ? "rgba(52, 211, 153, 0.6)" : "rgba(255, 255, 255, 0.08)";
+        edgeCardRef.current.style.boxShadow =
+          evalT > 0.5 ? "0 0 24px -4px rgba(16, 185, 129, 0.25)" : "none";
+      }
+      if (cloudCardRef.current) {
+        cloudCardRef.current.style.opacity = (1 - evalT * 0.35).toFixed(3);
       }
     });
   }, []);
@@ -194,15 +294,16 @@ export function StorySections() {
         ==================================================
         LAYER 1: NATIVE CONTINUOUS SCROLL TRACK
         ==================================================
-        Provides 750vh continuous document height for mouse wheel / trackpad,
-        with semantic anchor tags for navigation jumps (#overview, #local, #edge, #cloud).
+        Provides 1050vh continuous document height for mouse wheel / trackpad,
+        with semantic anchor tags for navigation jumps (#overview, #local, #edge, #cloud, #decision).
         Zero scroll-snapping, zero slide hijacking.
       */}
-      <div className="relative w-full h-[750vh] pointer-events-none" aria-hidden="true">
+      <div className="relative w-full h-[1050vh] pointer-events-none" aria-hidden="true">
         <div id="overview" className="absolute top-0 h-px w-px" />
         <div id="local" className="absolute top-[180vh] h-px w-px" />
         <div id="edge" className="absolute top-[440vh] h-px w-px" />
         <div id="cloud" className="absolute top-[660vh] h-px w-px" />
+        <div id="decision" className="absolute top-[880vh] h-px w-px" />
       </div>
 
       {/* 
@@ -821,6 +922,335 @@ export function StorySections() {
             <div className="mt-3.5 flex items-center gap-2 font-mono text-[10px] tracking-[0.14em] text-slate-500 uppercase">
               <span className="h-1 w-1 rounded-full bg-violet-500/60" />
               <span>SIMULATED TELEMETRY · DEMO VALUES</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 5. DECISION CONTENT BLOCK (Exact identical footprint, left: 7vw) */}
+        <div
+          ref={decisionContainerRef}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            opacity: 0,
+          }}
+          className="pointer-events-auto"
+        >
+          {/* DECISION HEADING:
+              DECISION: 32–40px, uppercase, technical spacing
+              OFFLOADING: 72–96px, bold, tight line height
+          */}
+          <div
+            ref={decisionTitleRef}
+            style={{ willChange: "transform, opacity, filter", opacity: 0 }}
+            className="flex flex-col select-none"
+          >
+            <span
+              style={{
+                fontSize: "clamp(32px, 2.8vw, 40px)",
+                lineHeight: "1.0",
+                letterSpacing: "0.06em",
+              }}
+              className="font-bold text-slate-400 uppercase tracking-wider block font-sans"
+            >
+              DECISION
+            </span>
+            <span
+              style={{
+                fontSize: "clamp(72px, 6.8vw, 96px)",
+                lineHeight: "0.90",
+                letterSpacing: "-0.035em",
+              }}
+              className="font-black text-white uppercase tracking-tight block mt-1 font-sans"
+            >
+              OFFLOADING
+            </span>
+          </div>
+
+          {/* SUBTITLE & DESCRIPTION */}
+          <div
+            ref={decisionDescRef}
+            style={{
+              marginTop: "24px",
+              willChange: "transform, opacity, filter",
+              opacity: 0,
+            }}
+            className="flex flex-col gap-2"
+          >
+            <p
+              style={{
+                fontSize: "clamp(18px, 1.25vw, 20px)",
+                lineHeight: "1.4",
+              }}
+              className="text-cyan-400 font-medium font-sans"
+            >
+              Choose where the task should execute.
+            </p>
+            <p
+              style={{
+                fontSize: "clamp(15px, 1.1vw, 17px)",
+                lineHeight: "1.55",
+              }}
+              className="text-slate-300 font-normal font-sans"
+            >
+              The system evaluates task requirements, device resources, network conditions, and compute availability before selecting an execution environment.
+            </p>
+          </div>
+
+          {/* TASK_001 SPECIFICATION & TELEMETRY BLOCK */}
+          <div
+            ref={decisionTaskRef}
+            style={{
+              marginTop: "24px",
+              width: "100%",
+              maxWidth: "480px",
+              opacity: 0,
+              willChange: "transform, opacity, filter",
+            }}
+            className="select-none"
+          >
+            {/* Task Identification & Input Parameters */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "130px 1fr",
+                rowGap: "7px",
+                columnGap: "14px",
+                fontSize: "12px",
+                lineHeight: "1.4",
+                letterSpacing: "0.10em",
+              }}
+              className="font-mono"
+            >
+              <span className="text-cyan-400 font-semibold uppercase text-[11px] tracking-[0.16em]">
+                CURRENT TASK
+              </span>
+              <span className="text-cyan-200 font-bold tracking-wider">
+                {DEFAULT_TASK.id} · {DEFAULT_TASK.name}
+              </span>
+
+              <span className="text-slate-400 uppercase text-[11px] tracking-[0.16em]">
+                TASK SIZE
+              </span>
+              <span className="text-slate-100 font-semibold tracking-wider">
+                {DEFAULT_TASK.taskSizeMb} MB
+              </span>
+
+              <span className="text-slate-400 uppercase text-[11px] tracking-[0.16em]">
+                CPU DEMAND
+              </span>
+              <span className="text-slate-100 font-semibold tracking-wider">
+                {DEFAULT_TASK.cpuDemandPct} %
+              </span>
+
+              <span className="text-slate-400 uppercase text-[11px] tracking-[0.16em]">
+                MEMORY DEMAND
+              </span>
+              <span className="text-slate-100 font-semibold tracking-wider">
+                {DEFAULT_TASK.memoryDemandPct} %
+              </span>
+
+              <span className="text-slate-400 uppercase text-[11px] tracking-[0.16em]">
+                DEADLINE
+              </span>
+              <span className="text-slate-100 font-semibold tracking-wider">
+                {DEFAULT_TASK.deadlineMs} MS
+              </span>
+            </div>
+
+            {/* Subtle separator */}
+            <div className="w-12 h-px bg-cyan-400/25 my-3.5" />
+
+            {/* Dynamically Evaluated Selected Target & Reason */}
+            <div
+              ref={decisionReasonRef}
+              style={{ willChange: "transform, opacity, filter", opacity: 0 }}
+              className="p-3.5 rounded border border-emerald-500/40 bg-emerald-950/20 backdrop-blur-sm"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  SELECTED EXECUTION ENVIRONMENT
+                </span>
+                <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-emerald-300 font-bold px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30">
+                  {decisionResult.selectedCandidate.displayName}
+                </span>
+              </div>
+              <p className="font-sans text-[13px] leading-relaxed text-slate-200">
+                &ldquo;{decisionResult.reason}&rdquo;
+              </p>
+            </div>
+
+            {/* Clear Simulation Notice */}
+            <div className="mt-3 flex items-center gap-2 font-mono text-[10px] tracking-[0.14em] text-slate-500 uppercase">
+              <span className="h-1 w-1 rounded-full bg-cyan-500/60" />
+              <span>SIMULATED INPUTS · DEMO VALUES</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* 
+        ==================================================
+        LAYER 3: CANDIDATE EXECUTION ENVIRONMENTS COLUMN
+        ==================================================
+        Positioned fixed on the right side of the screen at right: 7vw.
+        Features 3 restrained technical nodes/cards: LOCAL, EDGE, CLOUD.
+        Matches editorial visual language; selected environment receives visual emphasis.
+      */}
+      <aside
+        ref={candidateCardsContainerRef}
+        style={{
+          position: "fixed",
+          right: "6vw",
+          top: "52%",
+          transform: "translateY(-50%)",
+          width: "23vw",
+          maxWidth: "340px",
+          zIndex: 20,
+          opacity: 0,
+        }}
+        className="pointer-events-none select-none flex flex-col gap-3 justify-center"
+      >
+        <div className="flex items-center justify-between px-1 mb-0.5">
+          <span className="font-mono text-[11px] font-semibold tracking-[0.2em] uppercase text-slate-400">
+            EVALUATION CANDIDATES
+          </span>
+          <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-slate-500">
+            COST SCORE
+          </span>
+        </div>
+
+        {/* 1. LOCAL CANDIDATE CARD */}
+        <div
+          ref={localCardRef}
+          className="rounded border border-white/[0.08] bg-[#050914]/85 p-3.5 backdrop-blur-md transition-all duration-300 pointer-events-auto"
+        >
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="font-mono text-xs font-bold tracking-[0.18em] uppercase text-amber-300">
+                LOCAL
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] tracking-[0.12em] text-slate-400 uppercase">
+                SCORE
+              </span>
+              <span className="font-mono text-xs font-bold text-amber-200">
+                {decisionResult.candidateScores.local.score}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 font-mono text-[11px] text-slate-300">
+            <div className="flex justify-between border-b border-white/[0.04] pb-1">
+              <span className="text-slate-400 uppercase text-[10px]">CPU AVAIL</span>
+              <span className="font-semibold">{DEFAULT_DEVICE.cpuAvailablePct}%</span>
+            </div>
+            <div className="flex justify-between border-b border-white/[0.04] pb-1">
+              <span className="text-slate-400 uppercase text-[10px]">MEMORY AVAIL</span>
+              <span className="font-semibold">{DEFAULT_DEVICE.memoryAvailablePct}%</span>
+            </div>
+            <div className="flex justify-between pt-0.5">
+              <span className="text-slate-400 uppercase text-[10px]">BATTERY</span>
+              <span className="font-semibold">{DEFAULT_DEVICE.batteryPct}%</span>
+            </div>
+            <div className="flex justify-between pt-0.5">
+              <span className="text-slate-400 uppercase text-[10px]">LATENCY</span>
+              <span className="font-semibold text-amber-300">{DEFAULT_DEVICE.latencyMs} MS</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. EDGE CANDIDATE CARD (SELECTED ENVIRONMENT) */}
+        <div
+          ref={edgeCardRef}
+          className="rounded border border-emerald-400/60 bg-[#041512]/90 p-3.5 backdrop-blur-md transition-all duration-300 relative overflow-hidden pointer-events-auto shadow-[0_0_24px_-4px_rgba(16,185,129,0.25)]"
+        >
+          {/* Subtle top indicator bar */}
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
+
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-mono text-xs font-bold tracking-[0.18em] uppercase text-emerald-300">
+                EDGE
+              </span>
+              <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-300 px-1.5 py-0.2 rounded bg-emerald-500/20 border border-emerald-500/40 font-semibold">
+                SELECTED
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] tracking-[0.12em] text-emerald-400 uppercase">
+                SCORE
+              </span>
+              <span className="font-mono text-xs font-bold text-emerald-200">
+                {decisionResult.candidateScores.edge.score}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 font-mono text-[11px] text-slate-200">
+            <div className="flex justify-between border-b border-emerald-500/15 pb-1">
+              <span className="text-emerald-400/80 uppercase text-[10px]">CPU LOAD</span>
+              <span className="font-semibold">{DEFAULT_EDGE.cpuLoadPct}%</span>
+            </div>
+            <div className="flex justify-between border-b border-emerald-500/15 pb-1">
+              <span className="text-emerald-400/80 uppercase text-[10px]">QUEUE</span>
+              <span className="font-semibold">{DEFAULT_EDGE.queueLength} TASKS</span>
+            </div>
+            <div className="flex justify-between pt-0.5">
+              <span className="text-emerald-400/80 uppercase text-[10px]">LATENCY</span>
+              <span className="font-semibold text-emerald-300">{DEFAULT_EDGE.latencyMs} MS</span>
+            </div>
+            <div className="flex justify-between pt-0.5">
+              <span className="text-emerald-400/80 uppercase text-[10px]">BANDWIDTH</span>
+              <span className="font-semibold">{DEFAULT_EDGE.bandwidthGbps} GBPS</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. CLOUD CANDIDATE CARD */}
+        <div
+          ref={cloudCardRef}
+          className="rounded border border-white/[0.08] bg-[#070514]/85 p-3.5 backdrop-blur-md transition-all duration-300 pointer-events-auto"
+        >
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-violet-400" />
+              <span className="font-mono text-xs font-bold tracking-[0.18em] uppercase text-violet-300">
+                CLOUD
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] tracking-[0.12em] text-slate-400 uppercase">
+                SCORE
+              </span>
+              <span className="font-mono text-xs font-bold text-violet-200">
+                {decisionResult.candidateScores.cloud.score}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 font-mono text-[11px] text-slate-300">
+            <div className="flex justify-between border-b border-white/[0.04] pb-1">
+              <span className="text-slate-400 uppercase text-[10px]">CPU LOAD</span>
+              <span className="font-semibold">{DEFAULT_CLOUD.cpuLoadPct}%</span>
+            </div>
+            <div className="flex justify-between border-b border-white/[0.04] pb-1">
+              <span className="text-slate-400 uppercase text-[10px]">QUEUE</span>
+              <span className="font-semibold">{DEFAULT_CLOUD.queueLength} TASKS</span>
+            </div>
+            <div className="flex justify-between pt-0.5">
+              <span className="text-slate-400 uppercase text-[10px]">LATENCY</span>
+              <span className="font-semibold text-violet-300">{DEFAULT_CLOUD.latencyMs} MS</span>
+            </div>
+            <div className="flex justify-between pt-0.5">
+              <span className="text-slate-400 uppercase text-[10px]">BANDWIDTH</span>
+              <span className="font-semibold">{DEFAULT_CLOUD.bandwidthGbps} GBPS</span>
             </div>
           </div>
         </div>

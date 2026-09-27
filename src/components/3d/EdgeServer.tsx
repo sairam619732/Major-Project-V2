@@ -118,8 +118,16 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
   // Frame-rate independent visual progress damping layer
   useFrame((state) => {
     if (!groupRef.current) return;
-    const p = Math.min(Math.max(scrollState.visualProgress, 0), 1);
+    const fullP = Math.max(scrollState.visualProgress, 0);
+    const p = Math.min(fullP, 1);
     const t = state.clock.getElapsedTime();
+
+    // Phase 10.1: Cleanly hide Edge Server during Decision section
+    if (fullP > 1.04) {
+      groupRef.current.visible = false;
+      return;
+    }
+    groupRef.current.visible = true;
 
     // Subtle idle floating & 3D breathing rotation for isometric depth (front server face angled toward camera)
     groupRef.current.position.y = position[1] + Math.sin(t * 0.65) * 0.02;

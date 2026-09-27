@@ -24,8 +24,9 @@ export function ScrollCameraController() {
 
   // R3F Render Loop: Driven by single master visualProgress (Section 1 & 11)
   useFrame((state) => {
-    // Phase 7.6: One master visual timeline p in [0, 1]
-    const p = Math.min(Math.max(scrollState.visualProgress, 0), 1);
+    // Phase 10: Single master visual timeline with smooth extension into Decision section
+    const fullP = Math.max(scrollState.visualProgress, 0);
+    const p = Math.min(fullP, 1);
 
     if (isDesktop) {
       if (p <= 0.18) {
@@ -106,7 +107,7 @@ export function ScrollCameraController() {
           THREE.MathUtils.lerp(0.14, 0.22, t),
           THREE.MathUtils.lerp(-0.45, -1.40, t)
         );
-      } else {
+      } else if (fullP <= 1.00) {
         // 7. SETTLE ON CLOUD (0.88–1.00): Camera gently settles into cinematic 3/4 isometric datacenter composition
         const t = smoothstep(0.88, 1.00, p);
         targetPos.current.set(
@@ -118,6 +119,19 @@ export function ScrollCameraController() {
           THREE.MathUtils.lerp(14.90, 15.35, t),
           THREE.MathUtils.lerp(0.22, 0.20, t),
           THREE.MathUtils.lerp(-1.40, -1.55, t)
+        );
+      } else {
+        // 8. DECISION OFFLOADING SECTION (Phase 10.1): Camera glides to dedicated centered Decision composition
+        const tDec = smoothstep(1.00, 1.20, fullP);
+        targetPos.current.set(
+          THREE.MathUtils.lerp(13.45, 25.70, tDec),
+          THREE.MathUtils.lerp(2.20, 0.45, tDec),
+          THREE.MathUtils.lerp(4.65, 6.40, tDec)
+        );
+        targetLook.current.set(
+          THREE.MathUtils.lerp(15.35, 26.00, tDec),
+          THREE.MathUtils.lerp(0.20, 0.45, tDec),
+          THREE.MathUtils.lerp(-1.55, 0.00, tDec)
         );
       }
     } else {
@@ -182,7 +196,7 @@ export function ScrollCameraController() {
           0.0,
           THREE.MathUtils.lerp(-0.60, -0.80, t)
         );
-      } else {
+      } else if (fullP <= 1.00) {
         const t = smoothstep(0.88, 1.00, p);
         targetPos.current.set(
           THREE.MathUtils.lerp(10.50, 13.80, t),
@@ -193,6 +207,18 @@ export function ScrollCameraController() {
           THREE.MathUtils.lerp(11.80, 15.20, t),
           THREE.MathUtils.lerp(0.0, 0.15, t),
           THREE.MathUtils.lerp(-0.80, -1.50, t)
+        );
+      } else {
+        const tDec = smoothstep(1.00, 1.20, fullP);
+        targetPos.current.set(
+          THREE.MathUtils.lerp(13.80, 26.00, tDec),
+          THREE.MathUtils.lerp(0.90, 0.40, tDec),
+          THREE.MathUtils.lerp(5.20, 8.40, tDec)
+        );
+        targetLook.current.set(
+          THREE.MathUtils.lerp(15.20, 26.00, tDec),
+          THREE.MathUtils.lerp(0.15, 0.40, tDec),
+          THREE.MathUtils.lerp(-1.50, 0.00, tDec)
         );
       }
     }

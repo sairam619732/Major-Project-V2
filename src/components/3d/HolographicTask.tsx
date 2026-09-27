@@ -80,6 +80,25 @@ export function HolographicTask() {
     );
   }, [edgeTargetX, edgeTargetY, edgeTargetZ, cloudTargetX, cloudTargetY, cloudTargetZ]);
 
+  // Segment 3: Continuous 3D CatmullRom spline connecting Cloud -> Decision Evaluation Center (Phase 10.1)
+  const decisionTargetX = 26.0;
+  const decisionTargetY = 0.40;
+  const decisionTargetZ = 0.0;
+
+  const trajectoryCurve3 = useMemo(() => {
+    return new THREE.CatmullRomCurve3(
+      [
+        new THREE.Vector3(cloudTargetX, cloudTargetY, cloudTargetZ), // START: at Cloud datacenter
+        new THREE.Vector3(18.00, 1.45, -0.90),                       // CONTROL 1: lift from Cloud
+        new THREE.Vector3(22.50, 1.05, -0.35),                       // CONTROL 2: transit to Decision Center
+        new THREE.Vector3(decisionTargetX, decisionTargetY, decisionTargetZ), // END: Decision Center
+      ],
+      false,
+      "centripetal",
+      0.5
+    );
+  }, [cloudTargetX, cloudTargetY, cloudTargetZ, decisionTargetX, decisionTargetY, decisionTargetZ]);
+
   // Smooth Hermite interpolation helpers
   const smoothstep = (min: number, max: number, value: number) => {
     const x = Math.max(0, Math.min(1, (value - min) / (max - min)));
@@ -334,6 +353,9 @@ export function HolographicTask() {
       violet: new THREE.Color("#8b5cf6"),
       violetEmissive: new THREE.Color("#6d28d9"),
       ringViolet: new THREE.Color("#a78bfa"),
+      paleCyan: new THREE.Color("#f0f9ff"),
+      paleEmissive: new THREE.Color("#38bdf8"),
+      ringPaleCyan: new THREE.Color("#bae6fd"),
       temp: new THREE.Color(),
       tempVec: new THREE.Vector3(),
     };
@@ -343,8 +365,9 @@ export function HolographicTask() {
   const curPos = useRef(new THREE.Vector3());
 
   useFrame((state, delta) => {
-    // Single master visual timeline p in [0, 1]
-    const p = Math.min(Math.max(scrollState.visualProgress, 0), 1);
+    // Phase 10: Single master visual timeline with smooth extension into Decision section
+    const fullP = Math.max(scrollState.visualProgress, 0);
+    const p = Math.min(fullP, 1);
     const t = state.clock.getElapsedTime();
 
     // 1. Task Materialization & Rise on Local Tablet (0.30 -> 0.44)
@@ -429,7 +452,7 @@ export function HolographicTask() {
         pointLightRef.current.color.copy(colors.temp);
         pointLightRef.current.intensity = 1.8 * matT + 0.5 * edgeHold + syncPulse * 0.45 * edgeHold;
       }
-    } else {
+    } else if (fullP <= 1.00) {
       // Segment 2: Edge -> Cloud
       trajectoryCurve2.getPoint(transit2, curPos.current);
 
@@ -453,18 +476,46 @@ export function HolographicTask() {
         pointLightRef.current.color.copy(colors.temp);
         pointLightRef.current.intensity = 1.8 * matT + 0.6 * cloudSettle + cloudSyncPulse * 0.50 * cloudSettle;
       }
+    } else {
+      // Segment 3: Cloud -> Decision Center (Phase 10.1: 1.00 -> 1.16)
+      const transit3 = smoothstep(1.00, 1.16, fullP);
+      const decisionHold = smoothstep(1.16, 1.28, fullP);
+      trajectoryCurve3.getPoint(transit3, curPos.current);
+
+      // Violet -> White / Pale Cyan decision palette (Phase 10.1 spec)
+      colors.temp.copy(colors.violet).lerp(colors.paleCyan, transit3);
+      coreMaterial.color.copy(colors.temp);
+      cageMaterial.color.copy(colors.temp);
+      particleMaterial.color.copy(colors.temp);
+
+      colors.temp.copy(colors.violetEmissive).lerp(colors.paleEmissive, transit3);
+      coreMaterial.emissive.copy(colors.temp);
+
+      colors.temp.copy(colors.ringViolet).lerp(colors.ringPaleCyan, transit3);
+      ringMaterial.color.copy(colors.temp);
+
+      const decisionSyncPulse = Math.sin(t * 3.4);
+      coreMaterial.emissiveIntensity = 2.4 + 0.6 * decisionHold + decisionSyncPulse * 0.35 * decisionHold;
+
+      if (pointLightRef.current) {
+        pointLightRef.current.color.copy(colors.temp);
+        pointLightRef.current.intensity = 1.8 * matT + 0.5 * decisionHold + decisionSyncPulse * 0.40 * decisionHold;
+      }
     }
 
     // Continuous floating oscillations that blend seamlessly based on progress
+    const transit3 = smoothstep(1.00, 1.16, fullP);
     const hoverFloatY = Math.sin(t * 1.6) * 0.03 * (1 - transit1);
     const hoverFloatX = Math.cos(t * 1.2) * 0.015 * (1 - transit1);
     const edgeFloatY = Math.sin(t * 1.8) * 0.02 * (transit1 * (1 - transit2));
     const edgeFloatX = Math.cos(t * 1.3) * 0.012 * (transit1 * (1 - transit2));
-    const cloudFloatY = Math.sin(t * 1.5) * 0.022 * cloudSettle;
-    const cloudFloatX = Math.cos(t * 1.1) * 0.014 * cloudSettle;
+    const cloudFloatY = Math.sin(t * 1.5) * 0.022 * (cloudSettle * (1 - transit3));
+    const cloudFloatX = Math.cos(t * 1.1) * 0.014 * (cloudSettle * (1 - transit3));
+    const decisionFloatY = Math.sin(t * 1.7) * 0.025 * transit3;
+    const decisionFloatX = Math.cos(t * 1.3) * 0.015 * transit3;
 
-    curPos.current.x += hoverFloatX + edgeFloatX + cloudFloatX;
-    curPos.current.y += hoverFloatY + edgeFloatY + cloudFloatY;
+    curPos.current.x += hoverFloatX + edgeFloatX + cloudFloatX + decisionFloatX;
+    curPos.current.y += hoverFloatY + edgeFloatY + cloudFloatY + decisionFloatY;
 
     if (groupRef.current) {
       groupRef.current.position.copy(curPos.current);

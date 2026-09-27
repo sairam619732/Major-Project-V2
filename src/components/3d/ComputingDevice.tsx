@@ -235,9 +235,16 @@ export function ComputingDevice() {
   // Gentle idle breathing animation + continuous scroll-driven screen activation (Timeline: 0.28–0.58)
   useFrame((state) => {
     if (!groupRef.current) return;
-    // Phase 7.6: Single master visual timeline p in [0, 1]
-    const p = Math.min(Math.max(scrollState.visualProgress, 0), 1);
+    const fullP = Math.max(scrollState.visualProgress, 0);
+    const p = Math.min(fullP, 1);
     const t = state.clock.getElapsedTime();
+
+    // Phase 10.1: Cleanly hide Computing Device during Decision section
+    if (fullP > 1.04) {
+      groupRef.current.visible = false;
+      return;
+    }
+    groupRef.current.visible = true;
 
     // Gentle vertical float
     groupRef.current.position.y = targetY + Math.sin(t * 0.7) * 0.045;
