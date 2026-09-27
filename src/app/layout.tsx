@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { SimulationTransition } from "@/components/transitions/SimulationTransition";
 
@@ -15,6 +15,13 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["500", "600", "700"],
+});
+
 export const metadata: Metadata = {
   title: "AI-Based Dynamic Task Offloading Optimization",
   description: "Dynamic execution across local, edge and cloud computing.",
@@ -26,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable}`}>
       <body className="min-h-screen bg-[#02040A] text-slate-100 antialiased selection:bg-cyan-500/20 selection:text-cyan-300">
         {children}
         {/* Phase 11.3: Dedicated Reusable Cinematic Signal Transition Overlay */}
