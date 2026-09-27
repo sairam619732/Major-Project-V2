@@ -25,8 +25,12 @@ export function useScrollListener() {
       const winHeight = window.innerHeight;
       const maxScroll = docHeight - winHeight;
 
-      const rawProgress = maxScroll > 0 ? scrollY / maxScroll : 0;
-      const scrollProgress = Math.min(Math.max(rawProgress, 0), 1);
+      // Phase 10: Calibrate timeline so the approved 4-tier journey (Hero -> Local -> Edge -> Cloud)
+      // occupies [0.0, 1.0] across 650vh, and the new Decision section extends smoothly [1.0, ~1.46]
+      const baseMaxScroll = winHeight * 6.5;
+      const rawProgress = baseMaxScroll > 0 ? scrollY / baseMaxScroll : 0;
+      const maxProgress = maxScroll > 0 ? maxScroll / baseMaxScroll : 1.0;
+      const scrollProgress = Math.max(0, Math.min(rawProgress, maxProgress));
 
       updateScrollTarget(scrollY, scrollProgress);
     };

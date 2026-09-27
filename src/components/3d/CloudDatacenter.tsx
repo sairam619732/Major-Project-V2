@@ -79,11 +79,23 @@ export function CloudDatacenter({
 
   useFrame((state) => {
     if (!groupRef.current) return;
-    const p = Math.min(Math.max(scrollState.visualProgress, 0), 1);
+    const fullP = Math.max(scrollState.visualProgress, 0);
+    const p = Math.min(fullP, 1);
     const t = state.clock.getElapsedTime();
 
-    // Subtle idle floating & 3D breathing rotation for isometric depth
-    groupRef.current.position.y = position[1] + Math.sin(t * 0.50) * 0.015;
+    // Phase 10.1: Clean exit transition when leaving Cloud toward Decision (1.00 -> 1.06)
+    if (fullP > 1.06) {
+      groupRef.current.visible = false;
+      return;
+    }
+    groupRef.current.visible = true;
+
+    const cloudExit = smoothstep(1.00, 1.06, fullP);
+    const exitFade = 1 - cloudExit;
+
+    // Subtle idle floating & 3D breathing rotation for isometric depth (sinks gracefully if exiting)
+    groupRef.current.position.y =
+      position[1] - cloudExit * 1.8 + Math.sin(t * 0.50) * 0.015;
     groupRef.current.rotation.y = -1.15 + Math.sin(t * 0.28) * 0.006;
     groupRef.current.rotation.x = 0.03 + Math.cos(t * 0.32) * 0.004;
 
@@ -98,13 +110,13 @@ export function CloudDatacenter({
 
     for (let i = 0; i < emmisItemsRef.current.length; i++) {
       const item = emmisItemsRef.current[i];
-      item.mat.emissiveIntensity = item.baseIntensity * pulseFactor;
+      item.mat.emissiveIntensity = item.baseIntensity * pulseFactor * exitFade;
     }
 
     // Localized violet/indigo point light in the server aisle
     if (aisleLightRef.current) {
       aisleLightRef.current.intensity =
-        3.0 + 1.6 * processingT + 0.8 * syncPulse * processingT;
+        (3.0 + 1.6 * processingT + 0.8 * syncPulse * processingT) * exitFade;
     }
   });
 

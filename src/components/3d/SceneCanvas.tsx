@@ -10,6 +10,7 @@ import { HolographicTask } from "./HolographicTask";
 import { EdgeServer } from "./EdgeServer";
 import { CloudDatacenter } from "./CloudDatacenter";
 import { CosmicTransition } from "./CosmicTransition";
+import { DecisionVisualization } from "./DecisionVisualization";
 
 export function SceneCanvas() {
   const [mounted, setMounted] = useState(false);
@@ -100,6 +101,8 @@ export function SceneCanvas() {
           <CloudDatacenter />
           {/* Subtle cosmic constellation transition in Edge -> Cloud WAN corridor */}
           <CosmicTransition />
+          {/* Dynamic offloading decision engine 3D candidate network */}
+          <DecisionVisualization />
         </Suspense>
       </Canvas>
     </div>
