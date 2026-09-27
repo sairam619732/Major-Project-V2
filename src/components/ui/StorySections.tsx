@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { subscribeScroll } from "@/store/scrollStore";
 import {
   evaluateOffloadingDecision,
@@ -9,6 +10,7 @@ import {
   DEFAULT_EDGE,
   DEFAULT_CLOUD,
 } from "@/lib/offloading/decisionEngine";
+import { transitionStore } from "@/lib/transition/transitionStore";
 
 function smoothstep(min: number, max: number, value: number) {
   const x = Math.max(0, Math.min(1, (value - min) / (max - min)));
@@ -16,6 +18,7 @@ function smoothstep(min: number, max: number, value: number) {
 }
 
 export function StorySections() {
+  const router = useRouter();
   const heroContentRef = useRef<HTMLDivElement>(null);
 
   const localContainerRef = useRef<HTMLDivElement>(null);
@@ -39,6 +42,10 @@ export function StorySections() {
   const decisionDescRef = useRef<HTMLDivElement>(null);
   const decisionTaskRef = useRef<HTMLDivElement>(null);
   const decisionReasonRef = useRef<HTMLDivElement>(null);
+  const decisionCtaRef = useRef<HTMLDivElement>(null);
+
+  // Cinematic Transition to /simulation Veil Ref
+  const transitionVeilRef = useRef<HTMLDivElement>(null);
 
   const candidateCardsContainerRef = useRef<HTMLDivElement>(null);
   const localCardRef = useRef<HTMLDivElement>(null);
@@ -220,13 +227,15 @@ export function StorySections() {
         cloudTeleRef.current.style.filter = `blur(${cloudTeleBlur.toFixed(1)}px)`;
       }
 
-      // 5. DECISION CONTENT (Phase 10: Reveals 1.06 -> 1.18, evaluates 1.20 -> 1.34)
+      // 5. DECISION CONTENT (Phase 10 & 11.2: Reveals 1.06 -> 1.18, evaluates 1.20 -> 1.34)
+      // Main cinematic story stops at Decision.
       const decT = smoothstep(1.06, 1.18, p);
       const evalT = smoothstep(1.20, 1.34, p);
 
       if (decisionContainerRef.current) {
         decisionContainerRef.current.style.opacity = decT.toFixed(3);
-        decisionContainerRef.current.style.pointerEvents = decT > 0.1 ? "auto" : "none";
+        decisionContainerRef.current.style.pointerEvents =
+          decT > 0.1 ? "auto" : "none";
       }
 
       if (decisionTitleRef.current) {
@@ -263,13 +272,22 @@ export function StorySections() {
         decisionReasonRef.current.style.filter = `blur(${reasonBlur.toFixed(1)}px)`;
       }
 
+      if (decisionCtaRef.current) {
+        const ctaT = smoothstep(1.24, 1.34, p);
+        const ctaY = (1 - ctaT) * 15;
+        decisionCtaRef.current.style.opacity = ctaT.toFixed(3);
+        decisionCtaRef.current.style.transform = `translate3d(0, ${ctaY.toFixed(1)}px, 0)`;
+        decisionCtaRef.current.style.pointerEvents = ctaT > 0.4 ? "auto" : "none";
+      }
+
       // Right Candidate Cards Column
       if (candidateCardsContainerRef.current) {
         const cardsT = smoothstep(1.08, 1.20, p);
         candidateCardsContainerRef.current.style.opacity = cardsT.toFixed(3);
-        candidateCardsContainerRef.current.style.pointerEvents = cardsT > 0.1 ? "auto" : "none";
+        candidateCardsContainerRef.current.style.pointerEvents =
+          cardsT > 0.1 ? "auto" : "none";
         candidateCardsContainerRef.current.style.transform = `translate3d(0, calc(-50% + ${(1 - cardsT) * 30}px), 0)`;
-        candidateCardsContainerRef.current.style.filter = `blur(${(1 - cardsT) * 6}px)`;
+        candidateCardsContainerRef.current.style.filter = `blur(${((1 - cardsT) * 6).toFixed(1)}px)`;
       }
 
       // Candidate Card Highlights when evaluated
@@ -288,17 +306,49 @@ export function StorySections() {
     });
   }, []);
 
+  // Phase 11.2: Listen to transition store during ENTER SIMULATION activation
+  useEffect(() => {
+    return transitionStore.subscribe((progress, isTrans) => {
+      if (!isTrans) {
+        if (transitionVeilRef.current) {
+          transitionVeilRef.current.style.opacity = "0";
+        }
+        return;
+      }
+
+      // 0.15 - 0.45: UI softly dissolves as signal detaches
+      const uiFade = 1 - smoothstep(0.15, 0.45, progress);
+      if (decisionContainerRef.current) {
+        decisionContainerRef.current.style.opacity = (
+          parseFloat(decisionContainerRef.current.style.opacity || "1") * uiFade
+        ).toFixed(3);
+      }
+      if (candidateCardsContainerRef.current) {
+        candidateCardsContainerRef.current.style.opacity = (
+          parseFloat(candidateCardsContainerRef.current.style.opacity || "1") * uiFade
+        ).toFixed(3);
+      }
+
+      // 0.72 - 0.98: Deep space dark void veil covers screen
+      if (transitionVeilRef.current) {
+        const veilT = smoothstep(0.72, 0.98, progress);
+        transitionVeilRef.current.style.opacity = veilT.toFixed(3);
+      }
+    });
+  }, []);
+
   return (
     <>
       {/* 
         ==================================================
         LAYER 1: NATIVE CONTINUOUS SCROLL TRACK
         ==================================================
-        Provides 1050vh continuous document height for mouse wheel / trackpad,
+        Provides 980vh continuous document height for mouse wheel / trackpad,
         with semantic anchor tags for navigation jumps (#overview, #local, #edge, #cloud, #decision).
+        The main cinematic story stops at Decision.
         Zero scroll-snapping, zero slide hijacking.
       */}
-      <div className="relative w-full h-[1050vh] pointer-events-none" aria-hidden="true">
+      <div className="relative w-full h-[980vh] pointer-events-none" aria-hidden="true">
         <div id="overview" className="absolute top-0 h-px w-px" />
         <div id="local" className="absolute top-[180vh] h-px w-px" />
         <div id="edge" className="absolute top-[440vh] h-px w-px" />
@@ -1088,6 +1138,45 @@ export function StorySections() {
               <span className="h-1 w-1 rounded-full bg-cyan-500/60" />
               <span>SIMULATED INPUTS · DEMO VALUES</span>
             </div>
+
+            {/* Editorial Restrained Transition CTA to /simulation */}
+            <div
+              ref={decisionCtaRef}
+              style={{ willChange: "transform, opacity", opacity: 0 }}
+              className="mt-6 flex flex-col gap-2.5 pointer-events-auto"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  transitionStore.triggerTransition(
+                    () => {
+                      router.push("/simulation");
+                    },
+                    2200,
+                    "decision_exit"
+                  );
+                }}
+                className="group relative flex items-center justify-between w-full px-5 py-3.5 rounded border border-cyan-500/50 bg-[#03141f]/75 hover:border-cyan-400 hover:bg-cyan-950/60 transition-all duration-300 backdrop-blur-md cursor-pointer shadow-[0_0_24px_-6px_rgba(6,182,212,0.35)]"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 group-hover:scale-125 transition-transform duration-300 shadow-[0_0_8px_#38bdf8]" />
+                  <span className="font-mono text-sm font-bold tracking-[0.22em] uppercase text-cyan-100 group-hover:text-white transition-colors">
+                    ENTER SIMULATION
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <span className="font-mono text-xs tracking-[0.20em] uppercase text-cyan-300/90 group-hover:text-cyan-200 transition-colors font-medium">
+                    RESEARCH LAB
+                  </span>
+                  <span className="font-mono text-base text-cyan-400 group-hover:translate-x-1.5 transition-transform duration-300">
+                    →
+                  </span>
+                </div>
+              </button>
+              <span className="font-mono text-xs tracking-[0.20em] text-slate-400 uppercase text-center">
+                SYSTEM // EXPERIMENT TRANSITION
+              </span>
+            </div>
           </div>
         </div>
       </aside>
@@ -1255,6 +1344,18 @@ export function StorySections() {
           </div>
         </div>
       </aside>
+
+      {/* 
+        ==================================================
+        LAYER 4: FULLSCREEN TRANSITION VEIL
+        ==================================================
+        Deep space dark void veil smoothly covers viewport during signal acceleration into /simulation
+      */}
+      <div
+        ref={transitionVeilRef}
+        style={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-[#02040A] pointer-events-none transition-opacity duration-300"
+      />
     </>
   );
 }

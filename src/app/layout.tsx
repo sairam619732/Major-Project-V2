@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SimulationTransition } from "@/components/transitions/SimulationTransition";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,6 +29,8 @@ export default function RootLayout({
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="min-h-screen bg-[#02040A] text-slate-100 antialiased selection:bg-cyan-500/20 selection:text-cyan-300">
         {children}
+        {/* Phase 11.3: Dedicated Reusable Cinematic Signal Transition Overlay */}
+        <SimulationTransition />
       </body>
     </html>
   );

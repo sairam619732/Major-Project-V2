@@ -21,6 +21,8 @@ import {
   DEFAULT_EDGE,
   DEFAULT_CLOUD,
 } from "@/lib/offloading/decisionEngine";
+import { simulationStore } from "@/lib/simulation/simulationState";
+import { transitionStore } from "@/lib/transition/transitionStore";
 
 // Smooth Hermite interpolation helper
 function smoothstep(min: number, max: number, value: number) {
@@ -28,8 +30,68 @@ function smoothstep(min: number, max: number, value: number) {
   return x * x * (3 - 2 * x);
 }
 
+function renderTabletCanvas(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  device: { cpuAvailablePct: number; memoryAvailablePct: number; batteryPct: number; latencyMs: number },
+  score: number,
+  isSelected: boolean
+) {
+  ctx.fillStyle = "#0c0803";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = "rgba(245, 158, 11, 0.14)";
+  ctx.lineWidth = 1.5;
+  for (let x = 0; x <= width; x += 36) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+  }
+  for (let y = 0; y <= height; y += 36) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+  }
+
+  ctx.strokeStyle = isSelected ? "rgba(245, 158, 11, 0.95)" : "rgba(245, 158, 11, 0.65)";
+  ctx.lineWidth = isSelected ? 4 : 3;
+  ctx.strokeRect(28, 28, width - 56, height - 56);
+
+  ctx.fillStyle = "#fbbf24";
+  ctx.font = "bold 34px 'Geist Mono', ui-monospace, monospace";
+  ctx.fillText("LOCAL RUNTIME // ON-CHIP NPU", 56, 92);
+
+  ctx.strokeStyle = "rgba(245, 158, 11, 0.40)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(56, 120);
+  ctx.lineTo(width - 56, 120);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(253, 230, 138, 0.95)";
+  ctx.font = "bold 30px 'Geist Mono', ui-monospace, monospace";
+  ctx.fillText(`CPU AVAIL:  ${device.cpuAvailablePct}%`, 56, 190);
+  ctx.fillText(`MEM AVAIL:  ${device.memoryAvailablePct}%`, 56, 260);
+
+  ctx.fillStyle = device.batteryPct < 25 ? "#ef4444" : "#f59e0b";
+  ctx.fillText(`BATTERY:    ${device.batteryPct}% [${device.batteryPct < 30 ? "DRAIN RISK" : "NOMINAL"}]`, 56, 330);
+
+  ctx.fillStyle = "rgba(253, 230, 138, 0.95)";
+  ctx.fillText(`LATENCY:    ${device.latencyMs} MS`, 56, 400);
+
+  ctx.fillStyle = "#fbbf24";
+  ctx.font = "bold 32px 'Geist Mono', ui-monospace, monospace";
+  ctx.fillText(`COST SCORE: ${score}`, 56, 480);
+
+  ctx.fillStyle = isSelected ? "#34d399" : "rgba(245, 158, 11, 0.85)";
+  ctx.font = "24px 'Geist Mono', ui-monospace, monospace";
+  ctx.fillText(isSelected ? "STATUS: >> ACTIVE OFFLOAD TARGET <<" : "STATUS: EVALUATION CANDIDATE", 56, 570);
+}
+
 export function DecisionVisualization() {
   const rootGroupRef = useRef<Group>(null);
+
+  // Dynamic tablet canvas and texture refs for live simulated updates
+  const tabletCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const tabletTextureRef = useRef<THREE.CanvasTexture | null>(null);
+  const lastTabletStateRef = useRef<string>("");
 
   // Candidate Node Groups
   const localNodeRef = useRef<Group>(null);
@@ -104,63 +166,21 @@ export function DecisionVisualization() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    // Dark OLED amber background
-    ctx.fillStyle = "#0c0803";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Fine technical grid
-    ctx.strokeStyle = "rgba(245, 158, 11, 0.14)";
-    ctx.lineWidth = 1.5;
-    for (let x = 0; x <= canvas.width; x += 36) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-    }
-    for (let y = 0; y <= canvas.height; y += 36) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-    }
-
-    // Outer border & technical corner brackets
-    ctx.strokeStyle = "rgba(245, 158, 11, 0.65)";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(28, 28, canvas.width - 56, canvas.height - 56);
-
-    // Title / Architecture
-    ctx.fillStyle = "#fbbf24";
-    ctx.font = "bold 34px 'Geist Mono', ui-monospace, monospace";
-    ctx.fillText("LOCAL RUNTIME // ON-CHIP NPU", 56, 92);
-
-    // Separator line
-    ctx.strokeStyle = "rgba(245, 158, 11, 0.40)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(56, 120);
-    ctx.lineTo(canvas.width - 56, 120);
-    ctx.stroke();
-
-    // Metrics (High-contrast legible telemetry)
-    ctx.fillStyle = "rgba(253, 230, 138, 0.95)";
-    ctx.font = "bold 30px 'Geist Mono', ui-monospace, monospace";
-    ctx.fillText(`CPU AVAIL:  ${DEFAULT_DEVICE.cpuAvailablePct}%`, 56, 190);
-    ctx.fillText(`MEM AVAIL:  ${DEFAULT_DEVICE.memoryAvailablePct}%`, 56, 260);
-
-    ctx.fillStyle = "#f59e0b";
-    ctx.fillText(`BATTERY:    ${DEFAULT_DEVICE.batteryPct}% [DRAIN RISK]`, 56, 330);
-
-    ctx.fillStyle = "rgba(253, 230, 138, 0.95)";
-    ctx.fillText(`LATENCY:    ${DEFAULT_DEVICE.latencyMs} MS`, 56, 400);
-
-    // Cost Score
-    ctx.fillStyle = "#fbbf24";
-    ctx.font = "bold 32px 'Geist Mono', ui-monospace, monospace";
-    ctx.fillText(`COST SCORE: ${decisionResult.candidateScores.local.score}`, 56, 480);
-
-    // Status footer
-    ctx.fillStyle = "rgba(245, 158, 11, 0.85)";
-    ctx.font = "24px 'Geist Mono', ui-monospace, monospace";
-    ctx.fillText("STATUS: EVALUATION CANDIDATE · UNSELECTED", 56, 570);
+    renderTabletCanvas(
+      ctx,
+      canvas.width,
+      canvas.height,
+      DEFAULT_DEVICE,
+      decisionResult.candidateScores.local.score,
+      false
+    );
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.flipY = true;
+
+    tabletCanvasRef.current = canvas;
+    tabletTextureRef.current = tex;
     return tex;
   }, [decisionResult.candidateScores.local.score]);
 
@@ -418,21 +438,57 @@ export function DecisionVisualization() {
     if (rootGroupRef.current) rootGroupRef.current.visible = true;
 
     // ==================================================
-    // 2. EVALUATION PROGRESS (1.20 -> 1.34)
-    // Transitions candidate assets from standby to evaluated selection state
+    // ==================================================
+    // 2. EVALUATION & SIMULATION MODE DETECTION
+    // Phase 10: 1.20 -> 1.34 evaluated baseline
+    // Phase 11.1: >= 1.40 dynamic simulated offloading
     // ==================================================
     const evalT = smoothstep(1.20, 1.34, fullP);
     const syncPulse = Math.sin(t * 3.6);
 
-    // Subtle micro-floating for analytical liveliness
+    const isSimMode = fullP >= 1.40;
+    const currentDecision = isSimMode
+      ? simulationStore.getDecision()
+      : decisionResult;
+
+    const activeTarget = currentDecision.selectedTarget;
+    const isEdgeSelected = activeTarget === "edge";
+    const isLocalSelected = activeTarget === "local";
+    const isCloudSelected = activeTarget === "cloud";
+
+    // Pacing: 0.20-0.40 candidate layout settles into open research configuration (p: 1.47 -> 1.54)
+    const simLayoutT = smoothstep(1.47, 1.54, fullP);
+
+    // Subtle micro-floating for analytical liveliness + open test configuration in simulation
     if (localNodeRef.current) {
-      localNodeRef.current.position.y = localPos.y + Math.sin(t * 1.5 + 1.0) * 0.012;
+      localNodeRef.current.position.y =
+        localPos.y + Math.sin(t * 1.5 + 1.0) * 0.012 + simLayoutT * 0.16;
+      localNodeRef.current.position.z = localPos.z + simLayoutT * 0.05;
     }
     if (edgeNodeRef.current) {
-      edgeNodeRef.current.position.y = edgePos.y + Math.sin(t * 1.6 + 2.0) * 0.015;
+      edgeNodeRef.current.position.x = edgePos.x - simLayoutT * 0.28;
+      edgeNodeRef.current.position.y =
+        edgePos.y + Math.sin(t * 1.6 + 2.0) * 0.015 - simLayoutT * 0.06;
     }
     if (cloudNodeRef.current) {
-      cloudNodeRef.current.position.y = cloudPos.y + Math.sin(t * 1.4 + 3.0) * 0.012;
+      cloudNodeRef.current.position.x = cloudPos.x + simLayoutT * 0.35;
+      cloudNodeRef.current.position.y =
+        cloudPos.y + Math.sin(t * 1.4 + 3.0) * 0.012 - simLayoutT * 0.06;
+    }
+
+    // Dynamic Tablet OLED Screen live redraw during simulation
+    if (isSimMode && tabletCanvasRef.current && tabletTextureRef.current) {
+      const dev = simulationStore.getState().device;
+      const score = currentDecision.candidateScores.local.score;
+      const key = `${dev.cpuAvailablePct}_${dev.memoryAvailablePct}_${dev.batteryPct}_${dev.latencyMs}_${score}_${isLocalSelected}`;
+      if (key !== lastTabletStateRef.current) {
+        lastTabletStateRef.current = key;
+        const ctx = tabletCanvasRef.current.getContext("2d");
+        if (ctx) {
+          renderTabletCanvas(ctx, 1024, 640, dev, score, isLocalSelected);
+          tabletTextureRef.current.needsUpdate = true;
+        }
+      }
     }
 
     // ==================================================
@@ -461,13 +517,6 @@ export function DecisionVisualization() {
         tempBox.current.max.y - 0.015,
         tempBox.current.max.z + 0.015
       );
-      if (haloMeshRef.current) {
-        haloMeshRef.current.position.set(
-          tempCenter.current.x,
-          tempBox.current.min.y + 0.01,
-          tempCenter.current.z
-        );
-      }
     }
 
     if (cloudNodeRef.current) {
@@ -480,6 +529,38 @@ export function DecisionVisualization() {
         tempBox.current.max.y - 0.06,
         tempBox.current.max.z - 0.02
       );
+    }
+
+    // Dynamic Selection Halo Ring repositioning & styling
+    if (haloMeshRef.current) {
+      edgeHaloMat.opacity =
+        (0.25 + evalT * 0.70 + syncPulse * 0.18 * evalT) * revealT;
+
+      if (isEdgeSelected) {
+        haloMeshRef.current.position.set(
+          edgeAnchor.current.x,
+          tempBox.current.min.y + 0.01,
+          edgeAnchor.current.z
+        );
+        haloMeshRef.current.scale.setScalar(1.0);
+        edgeHaloMat.color.set("#34d399");
+      } else if (isLocalSelected) {
+        haloMeshRef.current.position.set(
+          localAnchor.current.x,
+          localAnchor.current.y - 0.22,
+          localAnchor.current.z - 0.08
+        );
+        haloMeshRef.current.scale.setScalar(0.72);
+        edgeHaloMat.color.set("#fbbf24");
+      } else {
+        haloMeshRef.current.position.set(
+          cloudAnchor.current.x + 0.20,
+          cloudAnchor.current.y - 0.38,
+          cloudAnchor.current.z - 0.15
+        );
+        haloMeshRef.current.scale.setScalar(1.35);
+        edgeHaloMat.color.set("#c084fc");
+      }
     }
 
     // Update Local Connection Path
@@ -501,15 +582,20 @@ export function DecisionVisualization() {
     cloudPosAttr.needsUpdate = true;
 
     // ==================================================
-    // 4. STREAMING QUANTA ALONG SELECTED PATH (EDGE)
-    // Streams directly from TASK_001 anchor to Edge anchor
+    // 4. STREAMING QUANTA ALONG DYNAMIC SELECTED PATH
+    // Streams from TASK_001 anchor to the winning candidate anchor
     // ==================================================
-    const isEdgeSelected = decisionResult.selectedTarget === "edge";
-    const isLocalSelected = decisionResult.selectedTarget === "local";
-    const isCloudSelected = decisionResult.selectedTarget === "cloud";
-
     if (quantaRef.current) {
       quantaMat.opacity = evalT * 0.95 * revealT;
+
+      if (isEdgeSelected) {
+        quantaMat.color.set("#34d399");
+      } else if (isLocalSelected) {
+        quantaMat.color.set("#fbbf24");
+      } else {
+        quantaMat.color.set("#c084fc");
+      }
+
       const posAttr = quantaGeo.attributes.position as THREE.BufferAttribute;
       const count = 16;
       const startPt = isEdgeSelected
@@ -534,51 +620,78 @@ export function DecisionVisualization() {
     }
 
     // Dynamic Emissive Lighting for Real Assets
-    // EDGE (Selected Candidate in demo state)
+    // EDGE (Selected or Candidate)
     const edgeIntensity =
-      (2.0 + (isEdgeSelected ? evalT * 2.0 + syncPulse * 0.45 * evalT : -evalT * 0.9)) *
+      (1.4 + (isEdgeSelected ? evalT * 2.6 + syncPulse * 0.45 * evalT : -evalT * 0.6)) *
       revealT;
     for (let i = 0; i < edgeEmissivesRef.current.length; i++) {
       edgeEmissivesRef.current[i].emissiveIntensity = edgeIntensity;
     }
-
     if (edgePulseLightRef.current) {
       edgePulseLightRef.current.intensity =
-        (1.2 + (isEdgeSelected ? evalT * 3.0 + syncPulse * 0.6 * evalT : -evalT * 0.4)) *
+        (0.8 + (isEdgeSelected ? evalT * 3.2 + syncPulse * 0.6 * evalT : -evalT * 0.4)) *
         revealT;
     }
-    edgeHaloMat.opacity =
-      (isEdgeSelected ? 0.25 + evalT * 0.70 + syncPulse * 0.18 * evalT : 0) * revealT;
 
-    // LOCAL (Unselected Candidate - Subdued but clearly visible)
+    // LOCAL (Selected or Candidate)
     const localIntensity =
-      (1.4 + (isLocalSelected ? evalT * 1.6 : -evalT * 0.75)) * revealT;
+      (1.2 + (isLocalSelected ? evalT * 2.4 + syncPulse * 0.4 * evalT : -evalT * 0.5)) *
+      revealT;
     for (let i = 0; i < tabletEmissivesRef.current.length; i++) {
       tabletEmissivesRef.current[i].emissiveIntensity = localIntensity;
     }
     if (localLightRef.current) {
       localLightRef.current.intensity =
-        (0.6 + (isLocalSelected ? evalT * 1.6 : -evalT * 0.25)) * revealT;
+        (0.6 + (isLocalSelected ? evalT * 3.0 + syncPulse * 0.5 * evalT : -evalT * 0.3)) *
+        revealT;
     }
 
-    // CLOUD (Unselected Candidate - Subdued but clearly visible)
+    // CLOUD (Selected or Candidate)
     const cloudIntensity =
-      (1.4 + (isCloudSelected ? evalT * 1.6 : -evalT * 0.75)) * revealT;
+      (1.2 + (isCloudSelected ? evalT * 2.4 + syncPulse * 0.4 * evalT : -evalT * 0.5)) *
+      revealT;
     for (let i = 0; i < cloudEmissivesRef.current.length; i++) {
       cloudEmissivesRef.current[i].emissiveIntensity = cloudIntensity;
     }
     if (cloudLightRef.current) {
       cloudLightRef.current.intensity =
-        (0.6 + (isCloudSelected ? evalT * 1.6 : -evalT * 0.25)) * revealT;
+        (0.6 + (isCloudSelected ? evalT * 3.0 + syncPulse * 0.5 * evalT : -evalT * 0.3)) *
+        revealT;
     }
 
     // Candidate Evaluation Path Opacities
     localLineMat.opacity =
-      (0.38 + (isLocalSelected ? evalT * 0.50 : -evalT * 0.20)) * revealT;
+      (0.35 + (isLocalSelected ? evalT * 0.55 : -evalT * 0.15)) * revealT;
     edgeLineMat.opacity =
-      (0.42 + (isEdgeSelected ? evalT * 0.56 : -evalT * 0.20)) * revealT;
+      (0.35 + (isEdgeSelected ? evalT * 0.55 : -evalT * 0.15)) * revealT;
     cloudLineMat.opacity =
-      (0.38 + (isCloudSelected ? evalT * 0.50 : -evalT * 0.20)) * revealT;
+      (0.35 + (isCloudSelected ? evalT * 0.55 : -evalT * 0.15)) * revealT;
+
+    // Phase 11.2: Smooth Signal Detachment during Transition to /simulation
+    const isTrans = transitionStore.getIsTransitioning();
+    const transP = isTrans ? transitionStore.getProgress() : 0;
+    if (transP > 0.001) {
+      const lineFade = 1 - smoothstep(0.00, 0.35, transP);
+      localLineMat.opacity *= lineFade;
+      edgeLineMat.opacity *= lineFade;
+      cloudLineMat.opacity *= lineFade;
+      quantaMat.opacity *= lineFade;
+      edgeHaloMat.opacity *= lineFade;
+
+      const modelFade = 1 - smoothstep(0.20, 0.60, transP);
+      for (let i = 0; i < edgeEmissivesRef.current.length; i++) {
+        edgeEmissivesRef.current[i].emissiveIntensity *= modelFade;
+      }
+      for (let i = 0; i < tabletEmissivesRef.current.length; i++) {
+        tabletEmissivesRef.current[i].emissiveIntensity *= modelFade;
+      }
+      for (let i = 0; i < cloudEmissivesRef.current.length; i++) {
+        cloudEmissivesRef.current[i].emissiveIntensity *= modelFade;
+      }
+      if (edgePulseLightRef.current) edgePulseLightRef.current.intensity *= modelFade;
+      if (localLightRef.current) localLightRef.current.intensity *= modelFade;
+      if (cloudLightRef.current) cloudLightRef.current.intensity *= modelFade;
+    }
   });
 
   return (

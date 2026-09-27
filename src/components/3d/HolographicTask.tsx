@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { Group, Mesh, Points, PointLight } from "three";
 import { scrollState } from "@/store/scrollStore";
 import { updateTaskStatus } from "@/store/taskStore";
+import { transitionStore } from "@/lib/transition/transitionStore";
 
 export function HolographicTask() {
   const groupRef = useRef<Group>(null);
@@ -516,6 +517,50 @@ export function HolographicTask() {
 
     curPos.current.x += hoverFloatX + edgeFloatX + cloudFloatX + decisionFloatX;
     curPos.current.y += hoverFloatY + edgeFloatY + cloudFloatY + decisionFloatY;
+
+    // Phase 11.2: Cinematic Signal Transition from Decision to /simulation
+    const isTrans = transitionStore.getIsTransitioning();
+    const transP = isTrans ? transitionStore.getProgress() : 0;
+
+    if (transP > 0.001) {
+      // 0.40 - 0.60: Compresses into concentrated data core
+      const compT = smoothstep(0.35, 0.58, transP);
+      shroudMaterial.opacity *= (1 - compT);
+      ringMaterial.opacity *= (1 - compT);
+      cageMaterial.opacity *= (1 - compT * 0.7);
+
+      const coreScale = THREE.MathUtils.lerp(1.0, 0.40, compT);
+      coreMaterial.emissiveIntensity = THREE.MathUtils.lerp(2.4, 6.5, compT);
+
+      // 0.58 - 0.78: Accelerates forward along deep space path towards camera
+      const accelT = smoothstep(0.58, 0.78, transP);
+      curPos.current.z += accelT * 4.6;
+      curPos.current.y += accelT * 0.1;
+      const stretchZ = THREE.MathUtils.lerp(1.0, 2.5, accelT);
+      if (groupRef.current) {
+        groupRef.current.scale.set(coreScale * 0.85, coreScale * 0.85, coreScale * stretchZ);
+      }
+
+      // 0.78 - 0.90: Breaks into many tiny luminous particles
+      const fragT = smoothstep(0.78, 0.90, transP);
+      coreMaterial.opacity *= (1 - fragT);
+      cageMaterial.opacity *= (1 - fragT);
+
+      // 0.90 - 1.00: Particles disperse and fade away into dark void
+      const dispT = smoothstep(0.85, 1.00, transP);
+      particleMaterial.size = THREE.MathUtils.lerp(0.038, 0.09, fragT);
+      particleMaterial.opacity = (1 - dispT) * 1.8;
+      if (particlesRef.current) {
+        particlesRef.current.scale.setScalar(1.0 + dispT * 4.5);
+      }
+    } else {
+      if (groupRef.current) {
+        groupRef.current.scale.setScalar(1.0);
+      }
+      if (particlesRef.current) {
+        particlesRef.current.scale.setScalar(1.0);
+      }
+    }
 
     if (groupRef.current) {
       groupRef.current.position.copy(curPos.current);
