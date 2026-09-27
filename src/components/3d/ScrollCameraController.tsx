@@ -120,7 +120,7 @@ export function ScrollCameraController() {
           THREE.MathUtils.lerp(0.22, 0.20, t),
           THREE.MathUtils.lerp(-1.40, -1.55, t)
         );
-      } else {
+      } else if (fullP <= 1.40) {
         // 8. DECISION OFFLOADING SECTION (Phase 10.2.2): Intimate framing for balanced, readable candidate assets
         const tDec = smoothstep(1.00, 1.20, fullP);
         targetPos.current.set(
@@ -132,6 +132,20 @@ export function ScrollCameraController() {
           THREE.MathUtils.lerp(15.35, 26.00, tDec),
           THREE.MathUtils.lerp(0.20, 0.50, tDec),
           THREE.MathUtils.lerp(-1.55, 0.00, tDec)
+        );
+      } else {
+        // 9. SIMULATION SECTION (Phase 11.1): Gentle reframe into open research workspace
+        // Subtle shift rightward & pull back gives negative space for the left editorial parameter rail
+        const tSim = smoothstep(1.40, 1.70, fullP);
+        targetPos.current.set(
+          THREE.MathUtils.lerp(26.00, 26.85, tSim),
+          THREE.MathUtils.lerp(0.50, 0.40, tSim),
+          THREE.MathUtils.lerp(5.75, 6.25, tSim)
+        );
+        targetLook.current.set(
+          THREE.MathUtils.lerp(26.00, 26.35, tSim),
+          THREE.MathUtils.lerp(0.50, 0.40, tSim),
+          THREE.MathUtils.lerp(0.00, 0.00, tSim)
         );
       }
     } else {
