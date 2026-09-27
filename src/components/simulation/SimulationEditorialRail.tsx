@@ -1,326 +1,337 @@
-// Phase 11.3: Cinematic Editorial Simulation Parameters & Results
-// Large readable typography, zero card borders or dashboard boxes, generous negative space
+// Phase 11.8: Final Simulation Alignment + Parameter Bar Refinement
+// Technical range slider with active track segment fill, 16px circular handle, and tabular column alignment
+// 2x2 Technical Grid:
+// Top Row: TASK | LOCAL DEVICE
+// Bottom Row: EDGE SERVER | CLOUD INFRASTRUCTURE
 
 "use client";
 
 import { useSimulationState } from "@/lib/simulation/simulationState";
 import { SCENARIO_PRESETS } from "@/lib/simulation/simulationPresets";
 
-interface MinimalSliderProps {
+interface TechnicalSliderProps {
   label: string;
   value: number;
   min: number;
   max: number;
   step?: number;
   unit: string;
-  accent?: string;
+  accentColor: string;
+  glowColor: string;
   onChange: (val: number) => void;
 }
 
-function MinimalSlider({
+function TechnicalSlider({
   label,
   value,
   min,
   max,
   step = 1,
   unit,
-  accent = "accent-cyan-400",
+  accentColor,
+  glowColor,
   onChange,
-}: MinimalSliderProps) {
+}: TechnicalSliderProps) {
+  const pct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+  const trackGradient = `linear-gradient(to right, ${accentColor} 0%, ${accentColor} ${pct}%, rgba(255, 255, 255, 0.14) ${pct}%, rgba(255, 255, 255, 0.14) 100%)`;
+
   return (
-    <div className="flex flex-col py-2.5 group">
-      <div className="flex items-center justify-between font-mono mb-1.5">
-        <span className="text-slate-300 group-hover:text-white transition-colors text-[13px] sm:text-sm uppercase tracking-[0.16em] font-medium">
+    <div className="technical-slider flex flex-col py-1 group">
+      {/* Label on left, Tabular Value + Unit on far right */}
+      <div className="flex items-baseline justify-between font-mono mb-1">
+        <span className="text-[12.5px] sm:text-[13px] tracking-[0.08em] uppercase text-slate-300 font-medium group-hover:text-white transition-colors">
           {label}
         </span>
-        <span className="text-slate-100 font-semibold tabular-nums text-sm sm:text-[15px] tracking-wider">
-          {value}{" "}
-          <span className="text-slate-400 font-normal text-xs uppercase ml-0.5">
+        <div className="flex items-baseline justify-end gap-1.5 tabular-nums">
+          <span className="text-[13px] sm:text-[14px] font-semibold text-slate-100 tabular-nums text-right min-w-[3.6ch]">
+            {value}
+          </span>
+          <span className="text-[11px] text-slate-400 font-normal w-[4ch] text-left uppercase">
             {unit}
           </span>
-        </span>
+        </div>
       </div>
+      {/* Technical Instrument Track with Active Segment Fill */}
       <input
         type="range"
+        aria-label={label}
         min={min}
         max={max}
         step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className={`w-full h-1.5 bg-white/[0.12] group-hover:bg-white/[0.22] appearance-none cursor-pointer ${accent} transition-colors rounded-full`}
+        style={{
+          background: trackGradient,
+          "--slider-thumb-color": accentColor,
+          "--slider-thumb-glow": glowColor,
+        } as React.CSSProperties}
+        className="tech-slider w-full cursor-pointer"
       />
     </div>
   );
 }
 
-export function SimulationEditorialRail() {
+// ==================================================
+// COMPACT 2x2 PARAMETERS GRID + SCENARIO PRESETS
+// ==================================================
+export function SimulationCompactControls() {
   const {
     state,
-    decision,
     updateTask,
     updateDevice,
     updateEdge,
     updateCloud,
     applyPreset,
-    reset,
-    runSimulation,
   } = useSimulationState();
 
-  const selectedTarget = decision.selectedTarget;
-
-  const targetColor = {
-    local: "text-amber-400",
-    edge: "text-emerald-400",
-    cloud: "text-violet-400",
-  }[selectedTarget];
-
-  const targetGlow = {
-    local: "shadow-[0_0_28px_-4px_rgba(245,158,11,0.35)] border-amber-500/50",
-    edge: "shadow-[0_0_28px_-4px_rgba(16,185,129,0.35)] border-emerald-500/50",
-    cloud: "shadow-[0_0_28px_-4px_rgba(139,92,246,0.35)] border-violet-500/50",
-  }[selectedTarget];
-
   return (
-    <div className="flex flex-col gap-14 w-full text-slate-200 select-none">
-      {/* ================================================== */}
-      {/* 1. SECTION TITLE: SIMULATION PARAMETERS             */}
-      {/* ================================================== */}
-      <div className="flex flex-col gap-2">
-        <span className="font-mono text-xs tracking-[0.24em] text-cyan-400 uppercase font-semibold">
-          // CONFIGURATION
-        </span>
-        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white uppercase tracking-tight">
-          SIMULATION PARAMETERS
-        </h2>
-        <p className="text-base text-slate-300 font-sans mt-1">
-          Tune task dimensions and distributed compute conditions. Real-time cost scoring responds dynamically.
-        </p>
-      </div>
-
-      {/* ================================================== */}
-      {/* 2. PARAMETERS GRID (NO BOXED CARDS, CLEAN DIVIDERS)*/}
-      {/* ================================================== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-        {/* GROUP 1: // TASK */}
+    <div className="flex flex-col w-full text-slate-200 select-none">
+      {/* 2x2 Clean Technical Grid:
+          TOP ROW:    TASK             LOCAL DEVICE
+          BOTTOM ROW: EDGE SERVER      CLOUD INFRASTRUCTURE
+          Clear horizontal gap: 32–56px
+          Clear vertical gap: 28–44px
+      */}
+      <div className="parameter-grid grid grid-cols-2 [grid-template-columns:repeat(2,minmax(0,1fr))] gap-x-8 sm:gap-x-10 lg:gap-x-12 gap-y-7 sm:gap-y-8 lg:gap-y-9">
+        {/* ================================================== */}
+        {/* TOP LEFT: // TASK                                  */}
+        {/* ================================================== */}
         <div className="flex flex-col">
-          <div className="flex items-center gap-2 border-b border-cyan-500/30 pb-2 mb-3">
-            <span className="w-2 h-2 rounded-full bg-cyan-400" />
-            <span className="font-mono text-sm tracking-[0.20em] uppercase text-cyan-300 font-bold">
-              // TASK_001
+          <div className="parameter-heading flex items-center gap-2 border-b border-cyan-500/40 pb-1.5 mb-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#38bdf8]" />
+            <span className="font-mono text-[13px] sm:text-[14px] tracking-[0.10em] uppercase text-cyan-300 font-semibold">
+              {"// TASK"}
             </span>
           </div>
           <div className="flex flex-col divide-y divide-white/[0.04]">
-            <MinimalSlider
+            <TechnicalSlider
               label="Task Size"
               value={state.task.taskSizeMb}
               min={1}
               max={100}
               unit="MB"
-              accent="accent-cyan-400"
+              accentColor="#38bdf8"
+              glowColor="rgba(56, 189, 248, 0.5)"
               onChange={(val) => updateTask({ taskSizeMb: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="CPU Demand"
               value={state.task.cpuDemandPct}
               min={5}
               max={100}
               unit="%"
-              accent="accent-cyan-400"
+              accentColor="#38bdf8"
+              glowColor="rgba(56, 189, 248, 0.5)"
               onChange={(val) => updateTask({ cpuDemandPct: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Memory Demand"
               value={state.task.memoryDemandPct}
               min={5}
               max={100}
               unit="%"
-              accent="accent-cyan-400"
+              accentColor="#38bdf8"
+              glowColor="rgba(56, 189, 248, 0.5)"
               onChange={(val) => updateTask({ memoryDemandPct: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Deadline"
               value={state.task.deadlineMs}
               min={10}
               max={500}
               step={5}
               unit="MS"
-              accent="accent-cyan-400"
+              accentColor="#38bdf8"
+              glowColor="rgba(56, 189, 248, 0.5)"
               onChange={(val) => updateTask({ deadlineMs: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Priority"
               value={state.task.priority}
               min={1}
               max={5}
               unit="LVL"
-              accent="accent-cyan-400"
+              accentColor="#38bdf8"
+              glowColor="rgba(56, 189, 248, 0.5)"
               onChange={(val) => updateTask({ priority: val })}
             />
           </div>
         </div>
 
-        {/* GROUP 2: // LOCAL RUNTIME */}
+        {/* ================================================== */}
+        {/* TOP RIGHT: // LOCAL DEVICE                         */}
+        {/* ================================================== */}
         <div className="flex flex-col">
-          <div className="flex items-center gap-2 border-b border-amber-500/30 pb-2 mb-3">
-            <span className="w-2 h-2 rounded-full bg-amber-400" />
-            <span className="font-mono text-sm tracking-[0.20em] uppercase text-amber-300 font-bold">
-              // LOCAL DEVICE
+          <div className="parameter-heading flex items-center gap-2 border-b border-amber-500/40 pb-1.5 mb-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
+            <span className="font-mono text-[13px] sm:text-[14px] tracking-[0.10em] uppercase text-amber-300 font-semibold">
+              {"// LOCAL DEVICE"}
             </span>
           </div>
           <div className="flex flex-col divide-y divide-white/[0.04]">
-            <MinimalSlider
+            <TechnicalSlider
               label="CPU Available"
               value={state.device.cpuAvailablePct}
               min={0}
               max={100}
               unit="%"
-              accent="accent-amber-400"
+              accentColor="#fbbf24"
+              glowColor="rgba(251, 191, 36, 0.5)"
               onChange={(val) => updateDevice({ cpuAvailablePct: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Memory Available"
               value={state.device.memoryAvailablePct}
               min={0}
               max={100}
               unit="%"
-              accent="accent-amber-400"
+              accentColor="#fbbf24"
+              glowColor="rgba(251, 191, 36, 0.5)"
               onChange={(val) => updateDevice({ memoryAvailablePct: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Battery Level"
               value={state.device.batteryPct}
               min={5}
               max={100}
               unit="%"
-              accent="accent-amber-400"
+              accentColor="#fbbf24"
+              glowColor="rgba(251, 191, 36, 0.5)"
               onChange={(val) => updateDevice({ batteryPct: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Base Latency"
               value={state.device.latencyMs}
-              min={1}
+              min={0.1}
+              step={0.1}
               max={50}
               unit="MS"
-              accent="accent-amber-400"
+              accentColor="#fbbf24"
+              glowColor="rgba(251, 191, 36, 0.5)"
               onChange={(val) => updateDevice({ latencyMs: val })}
             />
           </div>
         </div>
 
-        {/* GROUP 3: // EDGE RUNTIME */}
+        {/* ================================================== */}
+        {/* BOTTOM LEFT: // EDGE SERVER                        */}
+        {/* ================================================== */}
         <div className="flex flex-col">
-          <div className="flex items-center gap-2 border-b border-emerald-500/30 pb-2 mb-3">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span className="font-mono text-sm tracking-[0.20em] uppercase text-emerald-300 font-bold">
-              // EDGE SERVER
+          <div className="parameter-heading flex items-center gap-2 border-b border-emerald-500/40 pb-1.5 mb-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+            <span className="font-mono text-[13px] sm:text-[14px] tracking-[0.10em] uppercase text-emerald-300 font-semibold">
+              {"// EDGE SERVER"}
             </span>
           </div>
           <div className="flex flex-col divide-y divide-white/[0.04]">
-            <MinimalSlider
+            <TechnicalSlider
               label="CPU Load"
               value={state.edge.cpuLoadPct}
               min={0}
               max={100}
               unit="%"
-              accent="accent-emerald-400"
+              accentColor="#34d399"
+              glowColor="rgba(52, 211, 153, 0.5)"
               onChange={(val) => updateEdge({ cpuLoadPct: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Task Queue"
               value={state.edge.queueLength}
               min={0}
-              max={20}
+              max={40}
               unit="TASKS"
-              accent="accent-emerald-400"
+              accentColor="#34d399"
+              glowColor="rgba(52, 211, 153, 0.5)"
               onChange={(val) => updateEdge({ queueLength: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Network Latency"
               value={state.edge.latencyMs}
-              min={5}
+              min={0.1}
+              step={0.1}
               max={100}
               unit="MS"
-              accent="accent-emerald-400"
+              accentColor="#34d399"
+              glowColor="rgba(52, 211, 153, 0.5)"
               onChange={(val) => updateEdge({ latencyMs: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Bandwidth"
               value={state.edge.bandwidthGbps}
               min={0.5}
-              max={10}
+              max={40}
               step={0.5}
               unit="GBPS"
-              accent="accent-emerald-400"
+              accentColor="#34d399"
+              glowColor="rgba(52, 211, 153, 0.5)"
               onChange={(val) => updateEdge({ bandwidthGbps: val })}
             />
           </div>
         </div>
 
-        {/* GROUP 4: // CLOUD DATACENTER */}
+        {/* ================================================== */}
+        {/* BOTTOM RIGHT: // CLOUD INFRASTRUCTURE              */}
+        {/* ================================================== */}
         <div className="flex flex-col">
-          <div className="flex items-center gap-2 border-b border-violet-500/30 pb-2 mb-3">
-            <span className="w-2 h-2 rounded-full bg-violet-400" />
-            <span className="font-mono text-sm tracking-[0.20em] uppercase text-violet-300 font-bold">
-              // CLOUD INFRASTRUCTURE
+          <div className="parameter-heading flex items-center gap-2 border-b border-violet-500/40 pb-1.5 mb-2">
+            <span className="w-2 h-2 rounded-full bg-violet-400 shadow-[0_0_8px_#a78bfa]" />
+            <span className="font-mono text-[13px] sm:text-[14px] tracking-[0.10em] uppercase text-violet-300 font-semibold">
+              {"// CLOUD INFRASTRUCTURE"}
             </span>
           </div>
           <div className="flex flex-col divide-y divide-white/[0.04]">
-            <MinimalSlider
+            <TechnicalSlider
               label="CPU Load"
               value={state.cloud.cpuLoadPct}
               min={0}
               max={100}
               unit="%"
-              accent="accent-violet-400"
+              accentColor="#a78bfa"
+              glowColor="rgba(167, 139, 250, 0.5)"
               onChange={(val) => updateCloud({ cpuLoadPct: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Task Queue"
               value={state.cloud.queueLength}
               min={0}
               max={30}
               unit="TASKS"
-              accent="accent-violet-400"
+              accentColor="#a78bfa"
+              glowColor="rgba(167, 139, 250, 0.5)"
               onChange={(val) => updateCloud({ queueLength: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Network Latency"
               value={state.cloud.latencyMs}
               min={20}
               max={300}
               unit="MS"
-              accent="accent-violet-400"
+              accentColor="#a78bfa"
+              glowColor="rgba(167, 139, 250, 0.5)"
               onChange={(val) => updateCloud({ latencyMs: val })}
             />
-            <MinimalSlider
+            <TechnicalSlider
               label="Bandwidth"
               value={state.cloud.bandwidthGbps}
               min={1}
-              max={40}
+              max={80}
               step={1}
               unit="GBPS"
-              accent="accent-violet-400"
+              accentColor="#a78bfa"
+              glowColor="rgba(167, 139, 250, 0.5)"
               onChange={(val) => updateCloud({ bandwidthGbps: val })}
             />
           </div>
         </div>
       </div>
 
-      {/* ================================================== */}
-      {/* 3. SCENARIO PRESETS: MINIMAL INLINE SELECTOR       */}
-      {/* ================================================== */}
-      <div className="flex flex-col gap-3 pt-6 border-t border-white/[0.08]">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl sm:text-2xl font-bold uppercase tracking-tight text-white">
-            SCENARIOS
-          </h3>
-          <span className="font-mono text-xs tracking-[0.18em] text-slate-400 uppercase">
-            QUICK BENCHMARKS
-          </span>
+      {/* Scenarios: Compact Single Line Technical Selector with 24-32px breathing room */}
+      <div className="scenarios flex flex-col gap-2 mt-6 sm:mt-7 lg:mt-8 pt-3 border-t border-white/[0.08]">
+        <div className="flex items-center justify-between font-mono text-[11px] tracking-[0.12em] uppercase text-slate-400">
+          <span className="font-semibold text-slate-300">SCENARIO BENCHMARKS:</span>
+          <span className="text-cyan-400/80 text-[10px]">PRESET MODES</span>
         </div>
-
-        {/* Inline horizontal selector: NO 6 CARDS */}
-        <div className="flex flex-wrap gap-2.5 pt-1">
+        <div className="flex flex-wrap gap-2">
           {SCENARIO_PRESETS.map((preset) => {
             const isCurrent = state.activePresetId === preset.id;
             return (
@@ -328,10 +339,11 @@ export function SimulationEditorialRail() {
                 key={preset.id}
                 type="button"
                 onClick={() => applyPreset(preset.id)}
-                className={`py-2 px-3.5 rounded text-xs sm:text-[13px] font-mono tracking-[0.16em] uppercase transition-all duration-200 cursor-pointer ${
+                aria-pressed={isCurrent}
+                className={`py-1.5 px-3 rounded text-[11px] sm:text-[12px] font-mono tracking-[0.10em] uppercase transition-all duration-200 cursor-pointer ${
                   isCurrent
-                    ? "bg-cyan-500/20 text-cyan-200 border-b-2 border-cyan-400 font-bold shadow-[0_0_12px_rgba(6,182,212,0.25)]"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent font-medium"
+                    ? "bg-cyan-500/20 text-cyan-200 border border-cyan-400/80 font-bold shadow-[0_0_10px_rgba(6,182,212,0.30)]"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.05] border border-white/[0.08] font-medium"
                 }`}
               >
                 {preset.name}
@@ -340,82 +352,128 @@ export function SimulationEditorialRail() {
           })}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* ================================================== */}
-      {/* 4. LIVE DECISION RESULT                            */}
-      {/* ================================================== */}
-      <div className="flex flex-col gap-5 pt-8 border-t border-white/[0.08]">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-xs tracking-[0.24em] text-cyan-400 uppercase font-semibold">
-            // LIVE DECISION
-          </span>
-          <span className="font-mono text-xs tracking-[0.16em] text-slate-500 uppercase">
-            DETERMINISTIC EVALUATION
-          </span>
-        </div>
+// ==================================================
+// BOTTOM RESULT STRIP: LIVE DECISION / SCORES / CTA
+// ==================================================
+export function SimulationBottomResultStrip() {
+  const { decision, reset, runSimulation } = useSimulationState();
+  const selectedTarget = decision.selectedTarget;
 
-        <div className="flex flex-col gap-1">
-          <span className="font-mono text-sm tracking-[0.22em] text-slate-400 uppercase font-medium">
+  const targetColor = {
+    local: "text-amber-400",
+    edge: "text-emerald-400",
+    cloud: "text-violet-400",
+  }[selectedTarget];
+
+  return (
+    <div className="decision-strip w-full flex items-center justify-between gap-6 text-slate-200 select-none">
+      {/* 1. Live Decision & Selected Environment */}
+      <div className="flex items-center gap-4 flex-shrink-0">
+        <div className="flex flex-col">
+          <span className="font-mono text-[11px] tracking-[0.18em] uppercase text-cyan-400 font-bold">
+            {"// LIVE DECISION"}
+          </span>
+          <span className="font-mono text-[11px] tracking-[0.12em] uppercase text-slate-400 font-medium">
             SELECTED ENVIRONMENT
           </span>
-          <span
-            className={`font-sans font-black text-5xl sm:text-6xl lg:text-7xl uppercase tracking-tight ${targetColor}`}
-          >
-            {decision.selectedCandidate.displayName}
-          </span>
         </div>
+        <span
+          className={`font-display font-black text-3xl sm:text-4xl lg:text-[42px] uppercase tracking-tight ${targetColor}`}
+        >
+          {decision.selectedCandidate.displayName}
+        </span>
+      </div>
 
-        {/* Cost Scores Comparison */}
-        <div className="grid grid-cols-3 gap-6 py-4 border-y border-white/[0.06]">
-          <div className="flex flex-col">
-            <span className="font-mono text-xs tracking-[0.18em] text-amber-400/90 uppercase font-medium">
+      {/* 2. Candidate Scores on ONE Alignment Line + Decision Reason Quote */}
+      <div className="decision-scores flex-1 flex flex-col justify-center gap-1 min-w-0 max-w-2xl px-6 border-x border-white/[0.08]">
+        {/* Scores */}
+        <div className="flex items-center gap-8 font-mono">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[11px] tracking-[0.14em] uppercase text-slate-400">
               LOCAL
             </span>
-            <span className="font-mono text-2xl sm:text-3xl font-bold text-amber-200 mt-1 tabular-nums">
+            <span
+              className={`text-lg font-bold tabular-nums ${
+                selectedTarget === "local" ? "text-amber-400 font-black" : "text-slate-300"
+              }`}
+            >
               {decision.candidateScores.local.score}
             </span>
           </div>
-          <div className="flex flex-col">
-            <span className="font-mono text-xs tracking-[0.18em] text-emerald-400/90 uppercase font-medium">
+
+          <div className="flex items-baseline gap-2">
+            <span className="text-[11px] tracking-[0.14em] uppercase text-slate-400">
               EDGE
             </span>
-            <span className="font-mono text-2xl sm:text-3xl font-bold text-emerald-200 mt-1 tabular-nums">
+            <span
+              className={`text-lg font-bold tabular-nums ${
+                selectedTarget === "edge" ? "text-emerald-400 font-black" : "text-slate-300"
+              }`}
+            >
               {decision.candidateScores.edge.score}
             </span>
           </div>
-          <div className="flex flex-col">
-            <span className="font-mono text-xs tracking-[0.18em] text-violet-400/90 uppercase font-medium">
+
+          <div className="flex items-baseline gap-2">
+            <span className="text-[11px] tracking-[0.14em] uppercase text-slate-400">
               CLOUD
             </span>
-            <span className="font-mono text-2xl sm:text-3xl font-bold text-violet-200 mt-1 tabular-nums">
+            <span
+              className={`text-lg font-bold tabular-nums ${
+                selectedTarget === "cloud" ? "text-violet-400 font-black" : "text-slate-300"
+              }`}
+            >
               {decision.candidateScores.cloud.score}
             </span>
           </div>
         </div>
 
-        {/* Formulated Analytical Reason */}
-        <p className="font-sans text-base sm:text-lg leading-relaxed text-slate-200 italic border-l-2 border-emerald-400/80 pl-4 py-1">
+        {/* Reason Quote */}
+        <p className="decision-reason font-sans text-[12px] sm:text-[13px] text-slate-300 italic truncate border-l border-emerald-400/60 pl-2">
           &ldquo;{decision.reason}&rdquo;
         </p>
-
-        {/* Primary and Secondary Actions */}
-        <div className="flex items-center gap-6 pt-4">
-          <button
-            type="button"
-            onClick={runSimulation}
-            className="px-7 py-3.5 rounded border border-cyan-400/60 bg-gradient-to-r from-cyan-950/60 to-[#031c26] hover:border-cyan-300 hover:from-cyan-950/80 text-cyan-100 font-mono text-sm tracking-[0.20em] uppercase font-bold transition-all shadow-[0_0_24px_-4px_rgba(6,182,212,0.35)] cursor-pointer"
-          >
-            RUN SIMULATION →
-          </button>
-          <button
-            type="button"
-            onClick={reset}
-            className="text-xs font-mono tracking-[0.18em] uppercase text-slate-400 hover:text-slate-200 underline underline-offset-4 transition-colors cursor-pointer"
-          >
-            RESET TO DEFAULT
-          </button>
-        </div>
       </div>
+
+      {/* 3. RUN SIMULATION CTA + RESET */}
+      <div className="flex items-center gap-4 flex-shrink-0">
+        <button
+          type="button"
+          onClick={runSimulation}
+          className="run-simulation px-6 py-3 rounded border border-cyan-400/80 bg-gradient-to-r from-cyan-950/80 to-[#031c26] hover:border-cyan-300 text-cyan-100 font-mono text-[13px] tracking-[0.12em] uppercase font-bold transition-all shadow-[0_0_20px_-4px_rgba(6,182,212,0.40)] hover:scale-[1.02] cursor-pointer flex items-center gap-2"
+        >
+          <span>RUN SIMULATION</span>
+          <span className="text-cyan-300">→</span>
+        </button>
+        <button
+          type="button"
+          onClick={reset}
+          className="text-[11px] font-mono tracking-[0.14em] uppercase text-slate-400 hover:text-slate-200 underline underline-offset-4 transition-colors cursor-pointer"
+        >
+          RESET
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Backwards compatibility wrappers
+export function SimulationParametersSection() {
+  return <SimulationCompactControls />;
+}
+
+export function SimulationResultSection() {
+  return <SimulationBottomResultStrip />;
+}
+
+export function SimulationEditorialRail() {
+  return (
+    <div className="flex flex-col gap-6 w-full">
+      <SimulationCompactControls />
+      <SimulationBottomResultStrip />
     </div>
   );
 }

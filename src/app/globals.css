@@ -6,6 +6,7 @@
   --accent-blue: #38bdf8;
   --font-geist-sans: "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-geist-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-space-grotesk: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 * {
@@ -28,8 +29,128 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.font-display {
+  font-family: var(--font-space-grotesk), sans-serif;
+}
+
+.font-sans {
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
 .font-mono {
-  font-family: var(--font-geist-mono);
+  font-family: var(--font-geist-mono), monospace;
+}
+
+/* ================================================== */
+/* PHASE 11.6: TYPOGRAPHY SYSTEM TOKENS                */
+/* ================================================== */
+
+/* Editorial Grid Shared Container: 1440px max width with consistent horizontal padding */
+.editorial-container {
+  width: 100%;
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: clamp(32px, 7vw, 120px);
+  padding-right: clamp(32px, 7vw, 120px);
+}
+
+/* Display XL: 96-120px, line-height: 0.9-1.0, tracking: -0.04em, weight: 700 Space Grotesk */
+.type-display-xl {
+  font-family: var(--font-space-grotesk), sans-serif;
+  font-size: clamp(84px, 7.5vw, 120px);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Display L: 64-80px, line-height: 0.95, tracking: -0.035em, weight: 700 Space Grotesk */
+.type-display-l {
+  font-family: var(--font-space-grotesk), sans-serif;
+  font-size: clamp(56px, 5.2vw, 80px);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Section Title: 40-52px, line-height: 1.05, tracking: -0.025em, weight: 700 Space Grotesk */
+.type-section-title {
+  font-family: var(--font-space-grotesk), sans-serif;
+  font-size: clamp(38px, 3.4vw, 52px);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Subtitle: 22-28px, line-height: 1.2, tracking: -0.01em, weight: 600 Geist Sans */
+.type-subtitle {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: clamp(22px, 1.8vw, 28px);
+  line-height: 1.22;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
+/* Body Large: 18-20px, line-height: 1.55, tracking: 0, weight: 400 Geist Sans */
+.type-body-lg {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: clamp(17px, 1.25vw, 20px);
+  line-height: 1.55;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+/* Body: 16px, line-height: 1.5, tracking: 0, weight: 400 Geist Sans */
+.type-body {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+/* Tech Heading: 14-16px, line-height: 1.35, tracking: 0.10em, weight: 600 Geist Mono */
+.type-tech-heading {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: clamp(14px, 1vw, 16px);
+  line-height: 1.35;
+  letter-spacing: 0.10em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* Tech Label: 13-15px, line-height: 1.4, tracking: 0.09em, weight: 500 Geist Mono */
+.type-tech-label {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: clamp(13px, 0.95vw, 15px);
+  line-height: 1.4;
+  letter-spacing: 0.09em;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+/* Tech Value: 15-17px, line-height: 1.3, tracking: 0.05em, weight: 600 Geist Mono tabular */
+.type-tech-value {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: clamp(15px, 1.1vw, 17px);
+  line-height: 1.3;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Micro Metadata: 11-12px, line-height: 1.35, tracking: 0.12em, weight: 500 Geist Mono */
+.type-micro-label {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: clamp(11px, 0.8vw, 12px);
+  line-height: 1.35;
+  letter-spacing: 0.12em;
+  font-weight: 500;
+  text-transform: uppercase;
 }
 
 /* Minimalist Dark Scrollbar */
@@ -45,4 +166,46 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(56, 189, 248, 0.4);
+}
+
+/* ================================================== */
+/* PHASE 11.8: TECHNICAL INSTRUMENT RANGE SLIDER      */
+/* ================================================== */
+input[type="range"].tech-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+input[type="range"].tech-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--slider-thumb-color, #38bdf8);
+  border: 2px solid #02040a;
+  box-shadow: 0 0 8px var(--slider-thumb-glow, rgba(56, 189, 248, 0.45));
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+input[type="range"].tech-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.18);
+  box-shadow: 0 0 12px var(--slider-thumb-glow, rgba(56, 189, 248, 0.7));
+}
+
+input[type="range"].tech-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--slider-thumb-color, #38bdf8);
+  border: 2px solid #02040a;
+  box-shadow: 0 0 8px var(--slider-thumb-glow, rgba(56, 189, 248, 0.45));
+  cursor: pointer;
 }

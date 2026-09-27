@@ -1,15 +1,55 @@
-// Phase 11.2: Dedicated 3D Simulation Research Canvas
-// Independent Three.js canvas & camera composition for the /simulation research laboratory
-
 "use client";
 
-import { useMemo, useRef, useEffect } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
+/* eslint-disable react-hooks/immutability -- R3F owns these mutable Three.js objects; frame callbacks update GPU resources without React renders. */
+
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Text, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import type { Group, Points, PointLight, Mesh, MeshBasicMaterial } from "three";
 import { simulationStore } from "@/lib/simulation/simulationState";
 import { SparseDeepSpaceStars } from "@/components/3d/SparseDeepSpaceStars";
+
+type Target = "local" | "edge" | "cloud";
+const COLORS = { local: "#fbbf24", edge: "#34d399", cloud: "#a78bfa" };
+const MODELS = {
+  local: { url: "/assets/device/sci_fi_tablet.glb", position: [0, 2.05, 0], rotation: [1.72, 0, 0], size: 2.85 },
+  edge: { url: "/assets/edge/data_center_rack.glb", position: [-1.6, -1.25, 0], rotation: [0.12, -1.9, 0], size: 2.3 },
+  cloud: { url: "/assets/cloud/cloud_datacenter_clean.glb", position: [1.6, -1.25, 0], rotation: [0.3, -0.85, 0], size: 2.65 },
+} satisfies Record<Target, { url: string; position: [number, number, number]; rotation: [number, number, number]; size: number }>;
+const TASK = new THREE.Vector3(0, .25, .5);
+
+function FitCamera() {
+  const { camera, size } = useThree();
+  useLayoutEffect(() => {
+    const ortho = camera as THREE.OrthographicCamera;
+    // Fit the whole topology, including labels, to either canvas dimension.
+    ortho.zoom = Math.min(size.width / 6.5, size.height / 6.5);
+    ortho.updateProjectionMatrix();
+  }, [camera, size]);
+  return null;
+}
+
+function Label({ children, color = "#94a3b8" }: { children: React.ReactNode; color?: string }) {
+  const { size } = useThree();
+  // Match the existing 12px labels under FitCamera's orthographic framing.
+  const pixelsPerUnit = Math.min(size.width / 6.5, size.height / 6.5);
+  return (
+    <Text
+      font="/fonts/GeistMono-Medium.ttf"
+      fontSize={12 / pixelsPerUnit}
+      letterSpacing={0.14}
+      anchorX="center"
+      anchorY="middle"
+      color={color}
+      raycast={() => null}
+      material-toneMapped={false}
+      material-depthTest={false}
+      renderOrder={10}
+    >
+      {children}
+    </Text>
+  );
+}
 
 // 2D Canvas Drawer for the 3D Tablet OLED Screen
 function renderTabletCanvas(
@@ -27,10 +67,16 @@ function renderTabletCanvas(
   ctx.strokeStyle = "rgba(245, 158, 11, 0.14)";
   ctx.lineWidth = 1.5;
   for (let x = 0; x <= width; x += 36) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
   }
   for (let y = 0; y <= height; y += 36) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
   }
 
   // Border & brackets
@@ -46,7 +92,10 @@ function renderTabletCanvas(
   // Separator
   ctx.strokeStyle = "rgba(245, 158, 11, 0.40)";
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(56, 120); ctx.lineTo(width - 56, 120); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(56, 120);
+  ctx.lineTo(width - 56, 120);
+  ctx.stroke();
 
   // Metrics
   ctx.fillStyle = "rgba(253, 230, 138, 0.95)";
@@ -55,7 +104,11 @@ function renderTabletCanvas(
   ctx.fillText(`MEM AVAIL:  ${device.memoryAvailablePct}%`, 56, 260);
 
   ctx.fillStyle = device.batteryPct < 25 ? "#ef4444" : "#f59e0b";
-  ctx.fillText(`BATTERY:    ${device.batteryPct}% [${device.batteryPct < 30 ? "DRAIN RISK" : "NOMINAL"}]`, 56, 330);
+  ctx.fillText(
+    `BATTERY:    ${device.batteryPct}% [${device.batteryPct < 30 ? "DRAIN RISK" : "NOMINAL"}]`,
+    56,
+    330
+  );
 
   ctx.fillStyle = "rgba(253, 230, 138, 0.95)";
   ctx.fillText(`LATENCY:    ${device.latencyMs} MS`, 56, 400);
@@ -66,544 +119,151 @@ function renderTabletCanvas(
 
   ctx.fillStyle = isSelected ? "#34d399" : "rgba(245, 158, 11, 0.85)";
   ctx.font = "24px 'Geist Mono', ui-monospace, monospace";
-  ctx.fillText(isSelected ? "STATUS: >> ACTIVE OFFLOAD TARGET <<" : "STATUS: EVALUATION CANDIDATE", 56, 570);
+  ctx.fillText(
+    isSelected ? "STATUS: >> ACTIVE OFFLOAD TARGET <<" : "STATUS: EVALUATION CANDIDATE",
+    56,
+    570
+  );
 }
 
-function Simulation3DScene() {
-  const rootRef = useRef<Group>(null);
 
-  // Candidate Node Groups
-  const localNodeRef = useRef<Group>(null);
-  const edgeNodeRef = useRef<Group>(null);
-  const cloudNodeRef = useRef<Group>(null);
-
-  // Candidate Lights
-  const localLightRef = useRef<PointLight>(null);
-  const edgePulseLightRef = useRef<PointLight>(null);
-  const cloudLightRef = useRef<PointLight>(null);
-
-  // Halo Mesh Ref
-  const haloMeshRef = useRef<Mesh>(null);
-  const haloMatRef = useRef<MeshBasicMaterial>(null);
-
-  // Streaming Quanta Particles along selected path
-  const quantaRef = useRef<Points>(null);
-
-  // Dynamic emissive materials
-  const tabletEmissivesRef = useRef<THREE.MeshStandardMaterial[]>([]);
-  const edgeEmissivesRef = useRef<THREE.MeshStandardMaterial[]>([]);
-  const cloudEmissivesRef = useRef<THREE.MeshStandardMaterial[]>([]);
-
-  // Tablet dynamic canvas texture
-  const tabletCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const tabletTextureRef = useRef<THREE.CanvasTexture | null>(null);
-  const lastTabletKeyRef = useRef<string>("");
-
-  // Load Real Assets
-  const { scene: tabletScene } = useGLTF("/assets/device/sci_fi_tablet.glb");
-  const { scene: edgeScene } = useGLTF("/assets/edge/data_center_rack.glb");
-  const { scene: cloudScene } = useGLTF("/assets/cloud/cloud_datacenter_clean.glb");
-
-  // Stable Analytical Coordinates (Centered around TASK_001 at 0, 0, 0)
-  const taskPos = useMemo(() => new THREE.Vector3(0.00, 0.00, 0.00), []);
-  const localPos = useMemo(() => new THREE.Vector3(0.00, 1.45, 0.00), []);
-  const edgePos = useMemo(() => new THREE.Vector3(-1.85, -0.75, 0.00), []);
-  const cloudPos = useMemo(() => new THREE.Vector3(1.85, -0.80, 0.00), []);
-
-  // Anchors from TASK_001 outer lattice
-  const taskTopAnchor = useMemo(() => new THREE.Vector3(0.00, 0.18, 0.02), []);
-  const taskLeftAnchor = useMemo(() => new THREE.Vector3(-0.14, -0.12, 0.02), []);
-  const taskRightAnchor = useMemo(() => new THREE.Vector3(0.14, -0.12, 0.02), []);
-
-  // World-space target anchors derived from candidate bounding boxes
-  const localAnchor = useRef(new THREE.Vector3(0.00, 1.25, 0.05));
-  const edgeAnchor = useRef(new THREE.Vector3(-1.85, -0.42, 0.05));
-  const cloudAnchor = useRef(new THREE.Vector3(1.65, -0.45, 0.05));
-
-  const tempBox = useRef(new THREE.Box3());
-  const tempCenter = useRef(new THREE.Vector3());
-
-  // High-Resolution Tablet OLED Texture
-  const tabletScreenTexture = useMemo(() => {
-    if (typeof document === "undefined") return null;
+function Candidate({ target }: { target: Target }) {
+  const config = MODELS[target];
+  const { scene } = useGLTF(config.url);
+  const group = useRef<THREE.Group>(null);
+  const lastScreen = useRef("");
+  const weight = useRef(0);
+  const screen = useMemo(() => {
+    if (target !== "local") return null;
     const canvas = document.createElement("canvas");
-    canvas.width = 1024;
-    canvas.height = 640;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-
-    const initialSim = simulationStore.getState();
-    const initialDecision = simulationStore.getDecision();
-    renderTabletCanvas(
-      ctx,
-      canvas.width,
-      canvas.height,
-      initialSim.device,
-      initialDecision.candidateScores.local.score,
-      initialDecision.selectedTarget === "local"
-    );
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.flipY = true;
-
-    tabletCanvasRef.current = canvas;
-    tabletTextureRef.current = tex;
-    return tex;
-  }, []);
-
-  // Cloned Models with custom materials
-  const clonedTablet = useMemo(() => {
-    tabletEmissivesRef.current = [];
-    const cl = tabletScene.clone(true);
-    cl.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        if (mesh.material) {
-          const orig = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-          const mat = (orig as THREE.MeshStandardMaterial).clone();
-          mat.envMapIntensity = 1.3;
-
-          const isScreen = mesh.name.toLowerCase().includes("screen");
-          if (isScreen && tabletScreenTexture) {
-            mat.map = tabletScreenTexture;
-            mat.emissiveMap = tabletScreenTexture;
-            mat.emissive = new THREE.Color("#ffffff");
-            mat.emissiveIntensity = 1.2;
-            mat.roughness = 0.10;
-            mat.metalness = 0.05;
-            tabletEmissivesRef.current.push(mat);
-          } else {
-            mat.roughness = 0.35;
-            mat.metalness = 0.70;
-            mat.color = new THREE.Color("#181d29");
-          }
-          mesh.material = mat;
-        }
-      }
-    });
-    return cl;
-  }, [tabletScene, tabletScreenTexture]);
-
-  const clonedEdge = useMemo(() => {
-    edgeEmissivesRef.current = [];
-    const cl = edgeScene.clone(true);
-    cl.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        if (mesh.material) {
-          const orig = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-          const mat = (orig as THREE.MeshStandardMaterial).clone();
+    canvas.width = 1024; canvas.height = 640;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return { canvas, texture };
+  }, [target]);
+  const model = useMemo(() => {
+    const clone = scene.clone(true);
+    clone.traverse(child => {
+      if (!(child instanceof THREE.Mesh)) return;
+      const copy = (original: THREE.Material) => {
+        const mat = original.clone();
+        if (mat instanceof THREE.MeshStandardMaterial) {
           mat.envMapIntensity = 1.4;
-
-          if (mat.name === "material") {
-            mat.roughness = 0.32;
-            mat.metalness = 0.80;
-            mat.color = new THREE.Color("#0c1018");
-          } else if (mat.name === "Mat_1") {
-            mat.transparent = true;
-            mat.opacity = 0.18;
-            mat.roughness = 0.08;
-            mat.metalness = 0.15;
-            mat.color = new THREE.Color("#0a0f18");
-          } else {
-            mat.roughness = 0.25;
-            mat.metalness = 0.50;
-            mat.color = new THREE.Color("#10b981");
-            mat.emissive = new THREE.Color("#05df72");
-            mat.emissiveIntensity = 2.4;
-            edgeEmissivesRef.current.push(mat);
+          mat.metalness = Math.min(mat.metalness, .55);
+          mat.roughness = Math.max(mat.roughness, .3);
+          if (target === "edge") {
+            if (mat.emissiveIntensity > 0 && mat.emissive.getHex() !== 0) mat.emissive.set(COLORS.edge);
+            if (!mat.map && mat.color.r + mat.color.g + mat.color.b < .1) mat.color.set("#263c44");
           }
-          mesh.material = mat;
-        }
-      }
-    });
-    return cl;
-  }, [edgeScene]);
-
-  const clonedCloud = useMemo(() => {
-    cloudEmissivesRef.current = [];
-    const cl = cloudScene.clone(true);
-    cl.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        if (mesh.material) {
-          const orig = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-          const mat = (orig as THREE.MeshStandardMaterial).clone();
-          mat.envMapIntensity = 1.3;
-
-          const isEmissive =
-            (mat.emissive && mat.emissive.getHex() > 0) ||
-            (mat.name && mat.name.toUpperCase().includes("EMISSIVE")) ||
-            (mesh.name && mesh.name.toUpperCase().includes("EMISSIVE"));
-
-          if (isEmissive) {
-            mat.color = new THREE.Color("#a855f7");
-            mat.emissive = new THREE.Color("#8b5cf6");
-            mat.emissiveIntensity = 1.6;
-            cloudEmissivesRef.current.push(mat);
-          } else {
-            mat.roughness = 0.35;
-            mat.metalness = 0.70;
-            mat.color = new THREE.Color("#0c0f1d");
+          if (screen && child.name.toLowerCase().includes("screen")) {
+            mat.map = screen.texture; mat.emissiveMap = screen.texture;
+            mat.emissive.set("white"); mat.emissiveIntensity = 1;
           }
-          mesh.material = mat;
         }
-      }
+        return mat;
+      };
+      child.material = Array.isArray(child.material) ? child.material.map(copy) : copy(child.material);
     });
-    return cl;
-  }, [cloudScene]);
-
-  // Connection Lines
-  const localLineGeo = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
-    return geo;
-  }, []);
-  const edgeLineGeo = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
-    return geo;
-  }, []);
-  const cloudLineGeo = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
-    return geo;
-  }, []);
-
-  const localLineMat = useMemo(
-    () =>
-      new THREE.LineBasicMaterial({
-        color: "#f59e0b",
-        transparent: true,
-        opacity: 0.35,
-        blending: THREE.AdditiveBlending,
-      }),
-    []
-  );
-  const edgeLineMat = useMemo(
-    () =>
-      new THREE.LineBasicMaterial({
-        color: "#10b981",
-        transparent: true,
-        opacity: 0.85,
-        blending: THREE.AdditiveBlending,
-      }),
-    []
-  );
-  const cloudLineMat = useMemo(
-    () =>
-      new THREE.LineBasicMaterial({
-        color: "#8b5cf6",
-        transparent: true,
-        opacity: 0.35,
-        blending: THREE.AdditiveBlending,
-      }),
-    []
-  );
-
-  const localLine = useMemo(() => new THREE.Line(localLineGeo, localLineMat), [localLineGeo, localLineMat]);
-  const edgeLine = useMemo(() => new THREE.Line(edgeLineGeo, edgeLineMat), [edgeLineGeo, edgeLineMat]);
-  const cloudLine = useMemo(() => new THREE.Line(cloudLineGeo, cloudLineMat), [cloudLineGeo, cloudLineMat]);
-
-  // Quanta streaming points
-  const [quantaGeo, quantaMat] = useMemo(() => {
-    const count = 16;
-    const positions = new Float32Array(count * 3);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({
-      color: "#34d399",
-      size: 0.046,
-      transparent: true,
-      opacity: 0.95,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+    clone.rotation.set(...config.rotation);
+    clone.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(clone);
+    const extent = box.getSize(new THREE.Vector3());
+    const scale = config.size / Math.max(extent.x, extent.y, extent.z);
+    clone.scale.setScalar(scale);
+    clone.updateWorldMatrix(true, true);
+    box.setFromObject(clone);
+    clone.position.sub(box.getCenter(new THREE.Vector3()));
+    clone.updateWorldMatrix(true, true);
+    return clone;
+  }, [scene, config, screen, target]);
+  const resources = useMemo(() => {
+    const geometry = new THREE.BufferGeometry().setFromPoints([TASK, TASK]);
+    const material = new THREE.LineBasicMaterial({ color: COLORS[target], transparent: true, opacity: .22 });
+    const line = new THREE.Line(geometry, material);
+    line.frustumCulled = false;
+    line.name = `simulation-route-${target}`;
+    const points = new THREE.BufferGeometry();
+    points.setAttribute("position", new THREE.BufferAttribute(new Float32Array(24), 3));
+    const signal = new THREE.PointsMaterial({ color: COLORS[target], size: 5, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+    return { geometry, material, line, points, signal, box: new THREE.Box3(), anchor: new THREE.Vector3() };
+  }, [target]);
+  useEffect(() => () => {
+    resources.geometry.dispose(); resources.material.dispose(); resources.points.dispose(); resources.signal.dispose();
+    screen?.texture.dispose();
+    model.traverse(child => {
+      if (child instanceof THREE.Mesh) (Array.isArray(child.material) ? child.material : [child.material]).forEach(mat => mat.dispose());
     });
-    return [geo, mat];
-  }, []);
-
-  // Selection Halo Ring
-  const haloGeo = useMemo(() => new THREE.RingGeometry(0.48, 0.58, 32), []);
-  const haloMat = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: "#34d399",
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.85,
-        blending: THREE.AdditiveBlending,
-      }),
-    []
-  );
-
-  // TASK_001 Center Components
-  const taskCoreMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: "#38bdf8",
-        emissive: "#0284c7",
-        emissiveIntensity: 2.6,
-        roughness: 0.15,
-        metalness: 0.8,
-      }),
-    []
-  );
-  const taskCageMat = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: "#38bdf8",
-        wireframe: true,
-        transparent: true,
-        opacity: 0.85,
-      }),
-    []
-  );
-  const taskRingMat = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: "#7dd3fc",
-        wireframe: true,
-        transparent: true,
-        opacity: 0.75,
-      }),
-    []
-  );
-
-  // Frame Loop (Live reactive Three.js rendering)
-  useFrame((state) => {
-    const t = state.clock.getElapsedTime();
-    const syncPulse = Math.sin(t * 3.6);
-
-    // Read live decision synchronously from reactive store
-    const simDecision = simulationStore.getDecision();
-    const activeTarget = simDecision.selectedTarget;
-
-    const isEdgeSelected = activeTarget === "edge";
-    const isLocalSelected = activeTarget === "local";
-    const isCloudSelected = activeTarget === "cloud";
-
-    // Subtle breathing / micro-hover for candidate nodes
-    if (localNodeRef.current) {
-      localNodeRef.current.position.y = localPos.y + Math.sin(t * 1.5 + 1.0) * 0.012;
+  }, [resources, screen, model]);
+  useFrame(({ clock }, delta) => {
+    if (!group.current) return;
+    const decision = simulationStore.getDecision();
+    weight.current = THREE.MathUtils.damp(weight.current, decision.selectedTarget === target ? 1 : 0, 5, delta);
+    // Measure only visible model geometry after final normalization and placement.
+    group.current.updateWorldMatrix(true, true);
+    resources.box.setFromObject(model);
+    resources.box.getCenter(resources.anchor);
+    // Front-facing center of the actual world-space bounds: the line ends on the model.
+    resources.anchor.z = resources.box.max.z;
+    const positions = resources.geometry.attributes.position as THREE.BufferAttribute;
+    positions.setXYZ(0, TASK.x, TASK.y, TASK.z);
+    positions.setXYZ(1, resources.anchor.x, resources.anchor.y, resources.anchor.z);
+    positions.needsUpdate = true;
+    resources.material.opacity = .22 + weight.current * .68;
+    resources.signal.opacity = weight.current * .95;
+    const particles = resources.points.attributes.position as THREE.BufferAttribute;
+    // Deterministic outward flow. Independent route weights crossfade when selection changes.
+    for (let i = 0; i < particles.count; i++) {
+      const u = (clock.elapsedTime * .34 + i / particles.count) % 1;
+      particles.setXYZ(i, THREE.MathUtils.lerp(TASK.x, resources.anchor.x, u), THREE.MathUtils.lerp(TASK.y, resources.anchor.y, u), THREE.MathUtils.lerp(TASK.z, resources.anchor.z, u));
     }
-    if (edgeNodeRef.current) {
-      edgeNodeRef.current.position.y = edgePos.y + Math.sin(t * 1.6 + 2.0) * 0.014;
-    }
-    if (cloudNodeRef.current) {
-      cloudNodeRef.current.position.y = cloudPos.y + Math.sin(t * 1.4 + 3.0) * 0.012;
-    }
-
-    // Dynamic Tablet OLED Redraw
-    if (tabletCanvasRef.current && tabletTextureRef.current) {
-      const dev = simulationStore.getState().device;
-      const score = simDecision.candidateScores.local.score;
-      const key = `${dev.cpuAvailablePct}_${dev.memoryAvailablePct}_${dev.batteryPct}_${dev.latencyMs}_${score}_${isLocalSelected}`;
-      if (key !== lastTabletKeyRef.current) {
-        lastTabletKeyRef.current = key;
-        const ctx = tabletCanvasRef.current.getContext("2d");
-        if (ctx) {
-          renderTabletCanvas(ctx, 1024, 640, dev, score, isLocalSelected);
-          tabletTextureRef.current.needsUpdate = true;
-        }
+    particles.needsUpdate = true;
+    if (screen) {
+      const device = simulationStore.getState().device;
+      const key = JSON.stringify([device, decision.candidateScores.local.score, decision.selectedTarget]);
+      if (lastScreen.current !== key) {
+        const context = screen.canvas.getContext("2d");
+        if (context) renderTabletCanvas(context, 1024, 640, device, decision.candidateScores.local.score, decision.selectedTarget === "local");
+        screen.texture.needsUpdate = true; lastScreen.current = key;
       }
-    }
-
-    // Physical Connectivity: Derives surface anchors from bounding boxes
-    if (localNodeRef.current) {
-      localNodeRef.current.updateWorldMatrix(true, false);
-      tempBox.current.setFromObject(localNodeRef.current);
-      tempBox.current.getCenter(tempCenter.current);
-      localAnchor.current.set(tempCenter.current.x, tempBox.current.min.y + 0.015, tempBox.current.max.z + 0.015);
-    }
-    if (edgeNodeRef.current) {
-      edgeNodeRef.current.updateWorldMatrix(true, false);
-      tempBox.current.setFromObject(edgeNodeRef.current);
-      tempBox.current.getCenter(tempCenter.current);
-      edgeAnchor.current.set(tempCenter.current.x, tempBox.current.max.y - 0.015, tempBox.current.max.z + 0.015);
-    }
-    if (cloudNodeRef.current) {
-      cloudNodeRef.current.updateWorldMatrix(true, false);
-      tempBox.current.setFromObject(cloudNodeRef.current);
-      tempBox.current.getCenter(tempCenter.current);
-      cloudAnchor.current.set(tempBox.current.min.x + 0.12, tempBox.current.max.y - 0.06, tempBox.current.max.z - 0.02);
-    }
-
-    // Update Evaluation Lines
-    const localAttr = localLineGeo.attributes.position as THREE.BufferAttribute;
-    localAttr.setXYZ(0, taskTopAnchor.x, taskTopAnchor.y, taskTopAnchor.z);
-    localAttr.setXYZ(1, localAnchor.current.x, localAnchor.current.y, localAnchor.current.z);
-    localAttr.needsUpdate = true;
-
-    const edgeAttr = edgeLineGeo.attributes.position as THREE.BufferAttribute;
-    edgeAttr.setXYZ(0, taskLeftAnchor.x, taskLeftAnchor.y, taskLeftAnchor.z);
-    edgeAttr.setXYZ(1, edgeAnchor.current.x, edgeAnchor.current.y, edgeAnchor.current.z);
-    edgeAttr.needsUpdate = true;
-
-    const cloudAttr = cloudLineGeo.attributes.position as THREE.BufferAttribute;
-    cloudAttr.setXYZ(0, taskRightAnchor.x, taskRightAnchor.y, taskRightAnchor.z);
-    cloudAttr.setXYZ(1, cloudAnchor.current.x, cloudAnchor.current.y, cloudAnchor.current.z);
-    cloudAttr.needsUpdate = true;
-
-    // Line Opacities: Selected path highlighted, unselected subdued
-    localLineMat.opacity = isLocalSelected ? 0.85 : 0.28;
-    edgeLineMat.opacity = isEdgeSelected ? 0.85 : 0.28;
-    cloudLineMat.opacity = isCloudSelected ? 0.85 : 0.28;
-
-    // Streaming Quanta Particles
-    if (quantaRef.current) {
-      if (isEdgeSelected) {
-        quantaMat.color.set("#34d399");
-      } else if (isLocalSelected) {
-        quantaMat.color.set("#fbbf24");
-      } else {
-        quantaMat.color.set("#c084fc");
-      }
-
-      const posAttr = quantaGeo.attributes.position as THREE.BufferAttribute;
-      const count = 16;
-      const startPt = isEdgeSelected ? taskLeftAnchor : isLocalSelected ? taskTopAnchor : taskRightAnchor;
-      const endPt = isEdgeSelected ? edgeAnchor.current : isLocalSelected ? localAnchor.current : cloudAnchor.current;
-
-      for (let i = 0; i < count; i++) {
-        const u = (t * 0.85 + i / count) % 1.0;
-        posAttr.setXYZ(
-          i,
-          THREE.MathUtils.lerp(startPt.x, endPt.x, u),
-          THREE.MathUtils.lerp(startPt.y, endPt.y, u),
-          THREE.MathUtils.lerp(startPt.z, endPt.z, u)
-        );
-      }
-      posAttr.needsUpdate = true;
-    }
-
-    // Dynamic Halo Ring
-    if (haloMeshRef.current) {
-      if (isEdgeSelected) {
-        haloMeshRef.current.position.set(edgeAnchor.current.x, edgePos.y - 0.52, edgeAnchor.current.z);
-        haloMeshRef.current.scale.setScalar(1.0);
-        haloMat.color.set("#34d399");
-      } else if (isLocalSelected) {
-        haloMeshRef.current.position.set(localAnchor.current.x, localPos.y - 0.26, localAnchor.current.z);
-        haloMeshRef.current.scale.setScalar(0.72);
-        haloMat.color.set("#fbbf24");
-      } else {
-        haloMeshRef.current.position.set(cloudAnchor.current.x + 0.15, cloudPos.y - 0.40, cloudAnchor.current.z);
-        haloMeshRef.current.scale.setScalar(1.35);
-        haloMat.color.set("#c084fc");
-      }
-      haloMat.opacity = 0.65 + syncPulse * 0.20;
-    }
-
-    // Dynamic Emissive Lighting for Candidates
-    const edgeIntensity = isEdgeSelected ? 3.4 + syncPulse * 0.5 : 1.2;
-    for (let i = 0; i < edgeEmissivesRef.current.length; i++) {
-      edgeEmissivesRef.current[i].emissiveIntensity = edgeIntensity;
-    }
-    if (edgePulseLightRef.current) {
-      edgePulseLightRef.current.intensity = isEdgeSelected ? 3.2 + syncPulse * 0.6 : 0.8;
-    }
-
-    const localIntensity = isLocalSelected ? 2.8 + syncPulse * 0.4 : 1.1;
-    for (let i = 0; i < tabletEmissivesRef.current.length; i++) {
-      tabletEmissivesRef.current[i].emissiveIntensity = localIntensity;
-    }
-    if (localLightRef.current) {
-      localLightRef.current.intensity = isLocalSelected ? 2.6 + syncPulse * 0.4 : 0.6;
-    }
-
-    const cloudIntensity = isCloudSelected ? 2.8 + syncPulse * 0.4 : 1.1;
-    for (let i = 0; i < cloudEmissivesRef.current.length; i++) {
-      cloudEmissivesRef.current[i].emissiveIntensity = cloudIntensity;
-    }
-    if (cloudLightRef.current) {
-      cloudLightRef.current.intensity = isCloudSelected ? 2.6 + syncPulse * 0.4 : 0.6;
     }
   });
-
-  return (
-    <group ref={rootRef} position={[0, 0, 0]}>
-      {/* 1. Evaluation Paths */}
-      <primitive object={localLine} />
-      <primitive object={edgeLine} />
-      <primitive object={cloudLine} />
-
-      {/* Streaming Quanta */}
-      <points ref={quantaRef} geometry={quantaGeo} material={quantaMat} />
-
-      {/* Selection Halo Ring */}
-      <mesh ref={haloMeshRef} geometry={haloGeo} material={haloMat} rotation={[-Math.PI / 2, 0, 0]} />
-
-      {/* 2. TASK_001 Center Visual */}
-      <group position={taskPos}>
-        {/* Core Diamond */}
-        <mesh material={taskCoreMat}>
-          <octahedronGeometry args={[0.15, 0]} />
-        </mesh>
-        {/* Wireframe Cage */}
-        <mesh material={taskCageMat} scale={1.32}>
-          <icosahedronGeometry args={[0.16, 0]} />
-        </mesh>
-        {/* Orbital Ring */}
-        <mesh material={taskRingMat} rotation={[0.4, 0.2, 0]}>
-          <ringGeometry args={[0.26, 0.27, 32]} />
-        </mesh>
-        <pointLight color="#38bdf8" intensity={2.6} distance={3.8} />
-      </group>
-
-      {/* 3. LOCAL Candidate: Real Tablet GLB */}
-      <group ref={localNodeRef} position={localPos} scale={0.34} rotation={[0.08, -0.04, 0.0]}>
-        <group rotation={[Math.PI / 2, 0, 0]}>
-          <primitive object={clonedTablet} />
-        </group>
-        <pointLight ref={localLightRef} color="#f59e0b" distance={3.5} intensity={0.7} position={[0, 0.1, 0.4]} />
-      </group>
-
-      {/* 4. EDGE Candidate: Real Edge Server GLB */}
-      <group ref={edgeNodeRef} position={edgePos} scale={0.28} rotation={[0.08, -1.75, 0.0]}>
-        <primitive object={clonedEdge} position={[0, -1.157, 0]} />
-        <pointLight ref={edgePulseLightRef} color="#10f08e" distance={4.8} intensity={3.2} position={[0.60, 0.15, 0.0]} />
-      </group>
-
-      {/* 5. CLOUD Candidate: Real Datacenter GLB */}
-      <group ref={cloudNodeRef} position={cloudPos} scale={0.038} rotation={[0.03, -1.15, 0.0]}>
-        <primitive object={clonedCloud} />
-        <pointLight ref={cloudLightRef} color="#8b5cf6" distance={3.6} intensity={0.8} position={[0, 1.4, 0]} />
-      </group>
+  return <>
+    <primitive object={resources.line} />
+    <points name={`simulation-signal-${target}`} geometry={resources.points} material={resources.signal} frustumCulled={false} />
+    <group ref={group} position={config.position} name={`simulation-${target}`}>
+      <primitive object={model} dispose={null} />
+      <pointLight color={COLORS[target]} position={[0, 1, 2]} intensity={3} distance={5} />
     </group>
-  );
+    <group position={[config.position[0], target === "local" ? 3 : -2.7, 0]}>
+      <Label color={COLORS[target]}>{target.toUpperCase()} {target === "local" ? "// DEVICE" : target === "edge" ? "// SERVER" : "// DATACENTER"}</Label>
+    </group>
+  </>;
+}
+
+function Task() {
+  return <group position={TASK} name="simulation-task">
+    <mesh><octahedronGeometry args={[.24, 0]} /><meshStandardMaterial color="white" emissive="#38bdf8" emissiveIntensity={2} /></mesh>
+    <mesh scale={1.35}><icosahedronGeometry args={[.28, 0]} /><meshBasicMaterial color="#38bdf8" wireframe transparent opacity={.8} /></mesh>
+    <mesh rotation={[.4, .2, 0]}><ringGeometry args={[.45, .46, 48]} /><meshBasicMaterial color="#7dd3fc" wireframe transparent opacity={.7} /></mesh>
+    <mesh rotation={[-.4, .35, 0]}><ringGeometry args={[.56, .57, 48]} /><meshBasicMaterial color="#7dd3fc" wireframe transparent opacity={.7} /></mesh>
+    <group position={[0, -.75, 0]}><Label color="#7dd3fc">TASK_001</Label></group>
+  </group>;
 }
 
 export function SimulationSceneCanvas() {
-  return (
-    <div className="w-full h-full min-h-[500px]">
-      <Canvas
-        camera={{ position: [0.0, 0.05, 4.3], fov: 46 }}
-        gl={{
-          antialias: true,
-          powerPreference: "high-performance",
-          alpha: true,
-        }}
-        dpr={[1, 2]}
-      >
-        <color attach="background" args={["#02040A"]} />
-
-        {/* Ambient & Directional Lighting */}
-        <ambientLight intensity={0.45} color="#0c1322" />
-        <directionalLight position={[4, 5, 4]} intensity={1.35} color="#f8fafc" />
-        <directionalLight position={[-4, 2, -3]} intensity={0.8} color="#0284c7" />
-
-        {/* Deep Space Background Stars */}
-        <SparseDeepSpaceStars />
-
-        {/* Simulation 3D Environment */}
-        <Simulation3DScene />
-      </Canvas>
-    </div>
-  );
+  return <div style={{ width: "100%", height: "100%", position: "relative" }}>
+    <Canvas orthographic camera={{ position: [0, 0, 12], near: .1, far: 100 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true }}>
+      <FitCamera />
+      <ambientLight intensity={1.1} />
+      <directionalLight position={[2, 4, 6]} intensity={3} color="#e2e8f0" />
+      <directionalLight position={[-4, 2, 3]} intensity={2} color="#7dd3fc" />
+      <SparseDeepSpaceStars />
+      <Suspense fallback={null}>
+        <Task />
+        <Candidate target="local" /><Candidate target="edge" /><Candidate target="cloud" />
+      </Suspense>
+    </Canvas>
+  </div>;
 }
 
-// Preload GLB assets
-useGLTF.preload("/assets/device/sci_fi_tablet.glb");
-useGLTF.preload("/assets/edge/data_center_rack.glb");
-useGLTF.preload("/assets/cloud/cloud_datacenter_clean.glb");
+Object.values(MODELS).forEach(model => useGLTF.preload(model.url));

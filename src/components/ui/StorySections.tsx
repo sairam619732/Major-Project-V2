@@ -1139,12 +1139,27 @@ export function StorySections() {
               <span>SIMULATED INPUTS · DEMO VALUES</span>
             </div>
 
-            {/* Editorial Restrained Transition CTA to /simulation */}
+            {/* ────────────────────────────────────────────────── */}
+            {/* SEPARATE CTA REGION BENEATH DECISION CONTENT       */}
+            {/* ────────────────────────────────────────────────── */}
             <div
               ref={decisionCtaRef}
-              style={{ willChange: "transform, opacity", opacity: 0 }}
-              className="mt-6 flex flex-col gap-2.5 pointer-events-auto"
+              style={{
+                willChange: "transform, opacity",
+                opacity: 0,
+                marginTop: "clamp(72px, calc(40svh - 288px), 144px)",
+              }}
+              className="mt-8 pt-5 pb-5 border-t border-b border-white/[0.12] flex flex-col gap-3 pointer-events-auto"
             >
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xs tracking-[0.24em] text-cyan-400 uppercase font-semibold">
+                  SYSTEM // EXPERIMENT TRANSITION
+                </span>
+                <span className="font-mono text-[11px] tracking-[0.16em] text-slate-500 uppercase">
+                  READY
+                </span>
+              </div>
+
               <button
                 type="button"
                 onClick={() => {
@@ -1156,26 +1171,18 @@ export function StorySections() {
                     "decision_exit"
                   );
                 }}
-                className="group relative flex items-center justify-between w-full px-5 py-3.5 rounded border border-cyan-500/50 bg-[#03141f]/75 hover:border-cyan-400 hover:bg-cyan-950/60 transition-all duration-300 backdrop-blur-md cursor-pointer shadow-[0_0_24px_-6px_rgba(6,182,212,0.35)]"
+                className="group relative flex items-center justify-between w-full px-5 py-4 rounded border border-cyan-400/50 bg-[#02101a]/95 hover:border-cyan-300 hover:bg-cyan-950/80 transition-all duration-300 backdrop-blur-md cursor-pointer shadow-[0_0_28px_-4px_rgba(6,182,212,0.35)]"
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 group-hover:scale-125 transition-transform duration-300 shadow-[0_0_8px_#38bdf8]" />
-                  <span className="font-mono text-sm font-bold tracking-[0.22em] uppercase text-cyan-100 group-hover:text-white transition-colors">
+                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 group-hover:scale-125 transition-transform duration-300 shadow-[0_0_10px_#38bdf8]" />
+                  <span className="font-mono text-base font-bold tracking-[0.24em] uppercase text-white group-hover:text-cyan-100 transition-colors">
                     ENTER SIMULATION
                   </span>
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <span className="font-mono text-xs tracking-[0.20em] uppercase text-cyan-300/90 group-hover:text-cyan-200 transition-colors font-medium">
-                    RESEARCH LAB
-                  </span>
-                  <span className="font-mono text-base text-cyan-400 group-hover:translate-x-1.5 transition-transform duration-300">
-                    →
-                  </span>
-                </div>
+                <span className="font-mono text-xl text-cyan-400 group-hover:translate-x-2 transition-transform duration-300">
+                  →
+                </span>
               </button>
-              <span className="font-mono text-xs tracking-[0.20em] text-slate-400 uppercase text-center">
-                SYSTEM // EXPERIMENT TRANSITION
-              </span>
             </div>
           </div>
         </div>
