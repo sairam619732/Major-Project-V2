@@ -4,3 +4,4 @@ export * from "./SparseDeepSpaceStars";
 export * from "./ScrollCameraController";
 export * from "./HolographicTask";
 export * from "./EdgeServer";
+export * from "./CloudDatacenter";

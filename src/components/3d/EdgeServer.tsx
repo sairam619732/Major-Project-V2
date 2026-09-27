@@ -2,8 +2,9 @@
 
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import type { Group } from "three";
+import type { Group, PointLight, MeshBasicMaterial } from "three";
 import { scrollState } from "@/store/scrollStore";
 
 interface EdgeServerProps {
@@ -12,6 +13,16 @@ interface EdgeServerProps {
 
 export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
   const groupRef = useRef<Group>(null);
+  const pointLightRef = useRef<PointLight>(null);
+  const upperLightRef = useRef<PointLight>(null);
+  const lowerLightRef = useRef<PointLight>(null);
+  const haloMatRef = useRef<MeshBasicMaterial>(null);
+
+  // References to emissive materials for synchronized processing pulse
+  const emmisMatsRef = useRef<THREE.MeshStandardMaterial[]>([]);
+
+  // Safe R3F model loading using the user's authentic Edge 3D GLB asset
+  const { scene } = useGLTF("/assets/edge/data_center_rack.glb");
 
   // Smooth Hermite interpolation helper
   const smoothstep = (min: number, max: number, value: number) => {
@@ -19,233 +30,212 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
     return x * x * (3 - 2 * x);
   };
 
-  // Materials for the compact metallic computing pod with continuous transparency support
-  const chassisMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: "#0a0f18",
-        roughness: 0.32,
-        metalness: 0.88,
-        envMapIntensity: 1.2,
-        transparent: true,
-        opacity: 0,
-      }),
-    []
-  );
+  // SSR-safe soft radial halo texture for cinematic atmospheric glow around active server modules
+  const haloTexture = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      grad.addColorStop(0, "rgba(16, 240, 142, 0.85)");
+      grad.addColorStop(0.35, "rgba(5, 223, 114, 0.40)");
+      grad.addColorStop(0.70, "rgba(6, 182, 212, 0.12)");
+      grad.addColorStop(1.0, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 128, 128);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  }, []);
 
-  const innerBayMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: "#04070d",
-        roughness: 0.55,
-        metalness: 0.75,
-        transparent: true,
-        opacity: 0,
-      }),
-    []
-  );
+  // Cloned scene configured with realistic dark metallic PBR materials & high-contrast emerald emissive LEDs
+  const clonedScene = useMemo(() => {
+    emmisMatsRef.current = [];
 
-  const bladeFaceMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: "#111827",
-        roughness: 0.28,
-        metalness: 0.92,
-        transparent: true,
-        opacity: 0,
-      }),
-    []
-  );
+    const cl = scene.clone(true);
+    cl.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
 
-  const ventFinMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: "#0f172a",
-        roughness: 0.45,
-        metalness: 0.85,
-        transparent: true,
-        opacity: 0,
-      }),
-    []
-  );
+        if (mesh.material) {
+          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          materials.forEach((m) => {
+            const mat = m as THREE.MeshStandardMaterial;
 
-  // Subtle Emerald Status Lights (Restrained emissive lighting)
-  const emeraldLedMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: "#10b981",
-        emissive: "#059669",
-        emissiveIntensity: 0,
-        roughness: 0.2,
-        metalness: 0.1,
-        transparent: true,
-        opacity: 0,
-      }),
-    []
-  );
+            // Preserve authentic PBR textures with solid depth and clear contrast
+            mat.envMapIntensity = 1.4;
 
-  const fiberGlowMaterial = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: "#34d399",
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-      }),
-    []
-  );
+            // 1. Chassis frame / outer body: deep space dark metallic finish
+            if (mat.name === "material") {
+              mat.roughness = 0.38;
+              mat.metalness = 0.75;
+              mat.color = new THREE.Color("#11151e");
+              mat.needsUpdate = true;
+            }
+            // 2. Acrylic / tinted glass door: crystal clear transparency so glowing blades are vivid
+            else if (mat.name === "Mat_1") {
+              mat.transparent = true;
+              mat.opacity = 0.18;
+              mat.roughness = 0.08;
+              mat.metalness = 0.15;
+              mat.color = new THREE.Color("#0a0f18");
+              mat.needsUpdate = true;
+            }
+            // 3. Server blades & high-resolution LED status indicators
+            else {
+              mat.roughness = 0.28;
+              mat.metalness = 0.50;
 
-  // Modular Server Blade Geometries
-  const chassisGeo = useMemo(() => new THREE.BoxGeometry(1.24, 1.95, 0.92), []);
-  const innerBayGeo = useMemo(() => new THREE.BoxGeometry(1.08, 1.75, 0.86), []);
-  const bladeGeo = useMemo(() => new THREE.BoxGeometry(1.02, 0.36, 0.84), []);
-  const finGeo = useMemo(() => new THREE.BoxGeometry(0.04, 1.70, 0.78), []);
-  const ledGeo = useMemo(() => new THREE.BoxGeometry(0.024, 0.016, 0.012), []);
-  const fiberLineGeo = useMemo(() => new THREE.BoxGeometry(0.85, 0.006, 0.008), []);
-  const basePedestalGeo = useMemo(() => new THREE.BoxGeometry(1.42, 0.12, 1.10), []);
+              const isEmissive =
+                mat.name === "Mat_2" ||
+                (mat.emissive && mat.emissive.getHex() > 0) ||
+                mat.emissiveMap !== null ||
+                (mat.name && mat.name.toLowerCase().includes("emmis")) ||
+                (mesh.name && mesh.name.toLowerCase().includes("emmis"));
+
+              if (isEmissive) {
+                // Vibrant, technical emerald status LED glow (individual LEDs remain pin-sharp via emissiveMap)
+                mat.emissive = new THREE.Color("#05df72");
+                mat.emissiveIntensity = 2.4;
+                mat.needsUpdate = true;
+                emmisMatsRef.current.push(mat);
+              }
+            }
+          });
+        }
+      }
+    });
+
+    return cl;
+  }, [scene]);
 
   // Frame-rate independent visual progress damping layer
   useFrame((state) => {
     if (!groupRef.current) return;
-    // Phase 7.6: Single master visual timeline p in [0, 1]
     const p = Math.min(Math.max(scrollState.visualProgress, 0), 1);
     const t = state.clock.getElapsedTime();
 
-    // Section 9: edgeReveal = smoothstep(0.78, 0.96, p)
-    const edgeReveal = smoothstep(0.78, 0.96, p);
+    // Subtle idle floating & 3D breathing rotation for isometric depth (front server face angled toward camera)
+    groupRef.current.position.y = position[1] + Math.sin(t * 0.65) * 0.02;
+    groupRef.current.rotation.y = -1.75 + Math.sin(t * 0.35) * 0.012;
+    groupRef.current.rotation.x = 0.08 + Math.cos(t * 0.35) * 0.006;
 
-    if (edgeReveal <= 0.001) {
-      groupRef.current.visible = false;
-      return;
+    // Edge Processing Response: activates when task arrives and settles (0.60 -> 0.72)
+    const processingT = smoothstep(0.60, 0.68, p) * (1 - smoothstep(0.72, 0.78, p));
+    const syncPulse = Math.sin(t * 3.5);
+    const ledWave = Math.sin(t * 5.0) * 0.5 + 0.5;
+
+    // Active status indication: Status LEDs switch from standby (2.4) to active processing cadence (up to 4.6)
+    const emissiveIntensity =
+      2.4 + 1.8 * processingT + (0.6 * syncPulse + 0.4 * ledWave) * processingT;
+
+    for (let i = 0; i < emmisMatsRef.current.length; i++) {
+      emmisMatsRef.current[i].emissiveIntensity = emissiveIntensity;
     }
-    groupRef.current.visible = true;
 
-    // 1. Continuous Opacity: opacity = edgeReveal
-    chassisMaterial.opacity = edgeReveal;
-    innerBayMaterial.opacity = edgeReveal;
-    bladeFaceMaterial.opacity = edgeReveal;
-    ventFinMaterial.opacity = edgeReveal;
-    emeraldLedMaterial.opacity = edgeReveal;
-    fiberGlowMaterial.opacity = 0.55 * edgeReveal;
+    // 1. Primary Central Processing Light: strong but controlled green glow with physical rack spill
+    if (pointLightRef.current) {
+      pointLightRef.current.intensity =
+        3.6 + 2.4 * processingT + 1.0 * syncPulse * processingT;
+    }
 
-    // 2. Continuous Scale: scale = lerp(0.82, 1.0, edgeReveal)
-    const currentScale = THREE.MathUtils.lerp(0.82, 1.0, edgeReveal) * 0.95;
-    groupRef.current.scale.setScalar(currentScale);
+    // 2. Upper and lower rack module accent spills
+    if (upperLightRef.current) {
+      upperLightRef.current.intensity = 1.8 + 1.2 * processingT;
+    }
+    if (lowerLightRef.current) {
+      lowerLightRef.current.intensity = 1.5 + 0.9 * processingT;
+    }
 
-    // 3. Continuous Position: position = lerp(farPosition, finalPosition, edgeReveal)
-    const finalPos = position;
-    const farPos = [position[0] + 0.6, position[1], position[2] - 2.2];
-
-    groupRef.current.position.x = THREE.MathUtils.lerp(farPos[0], finalPos[0], edgeReveal);
-    groupRef.current.position.y =
-      THREE.MathUtils.lerp(farPos[1], finalPos[1], edgeReveal) + Math.sin(t * 0.65) * 0.025;
-    groupRef.current.position.z = THREE.MathUtils.lerp(farPos[2], finalPos[2], edgeReveal);
-
-    // 4. Orientation facing inward toward incoming data signal
-    groupRef.current.rotation.y = -0.38 + Math.sin(t * 0.4) * 0.015;
-
-    // 5. Continuous Emerald Lighting & Status LEDs
-    const pulse = Math.sin(t * 8.0) * 0.25 * edgeReveal;
-    emeraldLedMaterial.emissiveIntensity = edgeReveal * (1.2 + pulse);
+    // 3. Volumetric soft halo breathing opacity
+    if (haloMatRef.current) {
+      haloMatRef.current.opacity =
+        0.28 + 0.24 * processingT + 0.08 * syncPulse * processingT;
+    }
   });
 
   return (
     <group
       ref={groupRef}
       position={position}
-      rotation={[0.08, -0.38, 0]}
-      scale={0.95}
+      rotation={[0.08, -1.75, 0]}
+      scale={0.90}
     >
-      {/* 1. Heavy Industrial Base Pedestal */}
-      <mesh
-        geometry={basePedestalGeo}
-        material={chassisMaterial}
-        position={[0, -1.02, 0]}
-        castShadow
-        receiveShadow
-      />
+      {/* Real Imported Edge Server Rack 3D Model centered at origin */}
+      <primitive object={clonedScene} position={[0, -1.157, 0]} />
 
-      {/* 2. Outer Protective Server Pod Shell */}
-      <mesh
-        geometry={chassisGeo}
-        material={chassisMaterial}
-        position={[0, 0, 0]}
-        castShadow
-        receiveShadow
-      />
-
-      {/* 3. Inset Blade Bay Cavity */}
-      <mesh
-        geometry={innerBayGeo}
-        material={innerBayMaterial}
-        position={[0, 0, 0.04]}
-      />
-
-      {/* 4. Four High-Density Computing Blade Modules */}
-      {[-0.57, -0.19, 0.19, 0.57].map((yOffset, i) => (
-        <group key={`blade-${i}`} position={[0, yOffset, 0.06]}>
-          {/* Blade Module Body */}
-          <mesh
-            geometry={bladeGeo}
-            material={bladeFaceMaterial}
-            position={[0, 0, 0]}
+      {/* Soft Volumetric Emerald Halo hovering in front of active server bay */}
+      {haloTexture && (
+        <mesh position={[0.47, 0.15, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[0.78, 1.85]} />
+          <meshBasicMaterial
+            ref={haloMatRef}
+            map={haloTexture}
+            transparent
+            opacity={0.28}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
           />
+        </mesh>
+      )}
 
-          {/* Glowing Optical Data Channel */}
-          <mesh
-            geometry={fiberLineGeo}
-            material={fiberGlowMaterial}
-            position={[0, -0.08, 0.43]}
-          />
-
-          {/* Matrix of Emerald Status LEDs across blade front */}
-          {[-0.42, -0.34, -0.26, -0.18, 0.18, 0.26, 0.34, 0.42].map((xOffset, j) => (
-            <mesh
-              key={`led-${i}-${j}`}
-              geometry={ledGeo}
-              material={emeraldLedMaterial}
-              position={[xOffset, 0.10, 0.43]}
-            />
-          ))}
-
-          {/* Central Module Activity Indicator Bar */}
-          <mesh
-            position={[0, 0.10, 0.43]}
-            geometry={new THREE.BoxGeometry(0.12, 0.016, 0.012)}
-            material={emeraldLedMaterial}
-          />
-        </group>
-      ))}
-
-      {/* 5. Lateral Heat Dissipation Vents (Left & Right fins) */}
-      {[-0.64, 0.64].map((xOffset, sideIdx) => (
-        <group key={`vent-side-${sideIdx}`} position={[xOffset, 0, 0]}>
-          {[-0.25, -0.10, 0.05, 0.20].map((zOffset, finIdx) => (
-            <mesh
-              key={`fin-${finIdx}`}
-              geometry={finGeo}
-              material={ventFinMaterial}
-              position={[0, 0, zOffset]}
-            />
-          ))}
-        </group>
-      ))}
-
-      {/* 6. Restrained Localized Emerald Lighting */}
+      {/* Cinematic Lighting for Edge Computing Pod */}
+      {/* 1. Primary Central Processing Light in front of rack blades (+X local face) */}
       <pointLight
-        color="#10b981"
-        intensity={2.2}
-        distance={3.2}
-        decay={2}
-        position={[0, 0.2, 0.7]}
+        ref={pointLightRef}
+        color="#10f08e"
+        intensity={3.6}
+        distance={4.8}
+        decay={2.0}
+        position={[0.60, 0.15, 0.0]}
       />
 
-      {/* 7. Subtle Back Rim Light for Silhouette Definition */}
-      <directionalLight
-        position={[3, 2, -2]}
+      {/* 2. Upper Rack Module Accent Spill */}
+      <pointLight
+        ref={upperLightRef}
+        color="#05df72"
         intensity={1.8}
-        color="#34d399"
+        distance={3.5}
+        decay={2.0}
+        position={[0.55, 0.70, 0.0]}
+      />
+
+      {/* 3. Lower Rack Module Accent Spill */}
+      <pointLight
+        ref={lowerLightRef}
+        color="#10b981"
+        intensity={1.5}
+        distance={3.2}
+        decay={2.0}
+        position={[0.55, -0.60, 0.0]}
+      />
+
+      {/* 4. Soft Cyan Rim Accent (-X local rear / top) */}
+      <pointLight
+        color="#06b6d4"
+        intensity={2.6}
+        distance={5.0}
+        decay={1.8}
+        position={[-0.9, 1.1, 0.0]}
+      />
+
+      {/* 5. Soft Front Key Light for dark metallic chassis highlights */}
+      <pointLight
+        color="#f1f5f9"
+        intensity={1.8}
+        distance={6.0}
+        decay={1.8}
+        position={[1.8, 0.8, -0.6]}
       />
     </group>
   );
 }
+
+// Preload real Edge Server GLB model asset for instant hydration without hitching
+useGLTF.preload("/assets/edge/data_center_rack.glb");
