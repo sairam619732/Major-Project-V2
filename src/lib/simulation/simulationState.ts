@@ -1,5 +1,5 @@
-// Phase 11: Dynamic Offloading Simulation - Reactive State Store
-// Manages simulated parameters, triggers deterministic evaluation, and delivers live updates to UI & 3D
+// Phase 11 & Phase 13: Dynamic Offloading Simulation - Reactive State Store
+// Manages simulated parameters, triggers deterministic evaluation, and orchestrates FastAPI backend integration
 
 "use client";
 
@@ -20,6 +20,9 @@ import {
   SCENARIO_PRESETS,
 } from "./simulationPresets";
 import { evaluateOffloadingDecision } from "@/lib/offloading/decisionEngine";
+import { submitSimulationToBackend } from "@/services/apiClient";
+
+export type SimulationApiStatus = "idle" | "running" | "success" | "error";
 
 // Singleton In-Memory Simulation State Container
 let currentSimulationState: SimulationState = {
@@ -32,13 +35,17 @@ let currentSimulationState: SimulationState = {
   lastEvaluatedAt: Date.now(),
 };
 
-// Compute initial decision
+// Compute initial decision via deterministic engine
 let currentDecisionResult: DecisionResult = evaluateOffloadingDecision(
   currentSimulationState.task,
   currentSimulationState.device,
   currentSimulationState.edge,
   currentSimulationState.cloud
 );
+
+let currentApiStatus: SimulationApiStatus = "idle";
+let currentApiError: string | null = null;
+let currentDecisionSource: "client" | "backend" = "client";
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -58,6 +65,7 @@ function evaluateAndUpdate() {
     ...currentSimulationState,
     lastEvaluatedAt: Date.now(),
   };
+  currentDecisionSource = "client";
   notify();
 }
 
@@ -68,6 +76,18 @@ export const simulationStore = {
 
   getDecision(): DecisionResult {
     return currentDecisionResult;
+  },
+
+  getApiStatus(): SimulationApiStatus {
+    return currentApiStatus;
+  },
+
+  getApiError(): string | null {
+    return currentApiError;
+  },
+
+  getDecisionSource(): "client" | "backend" {
+    return currentDecisionSource;
   },
 
   subscribe(listener: Listener): () => void {
@@ -81,6 +101,8 @@ export const simulationStore = {
       task: { ...currentSimulationState.task, ...updates },
       activePresetId: null, // Custom user modification
     };
+    currentApiStatus = "idle";
+    currentApiError = null;
     evaluateAndUpdate();
   },
 
@@ -90,6 +112,8 @@ export const simulationStore = {
       device: { ...currentSimulationState.device, ...updates },
       activePresetId: null,
     };
+    currentApiStatus = "idle";
+    currentApiError = null;
     evaluateAndUpdate();
   },
 
@@ -99,6 +123,8 @@ export const simulationStore = {
       edge: { ...currentSimulationState.edge, ...updates },
       activePresetId: null,
     };
+    currentApiStatus = "idle";
+    currentApiError = null;
     evaluateAndUpdate();
   },
 
@@ -108,6 +134,8 @@ export const simulationStore = {
       cloud: { ...currentSimulationState.cloud, ...updates },
       activePresetId: null,
     };
+    currentApiStatus = "idle";
+    currentApiError = null;
     evaluateAndUpdate();
   },
 
@@ -123,6 +151,8 @@ export const simulationStore = {
       cloud: { ...DEFAULT_SIMULATION_CLOUD, ...preset.state.cloud },
       activePresetId: preset.id,
     };
+    currentApiStatus = "idle";
+    currentApiError = null;
     evaluateAndUpdate();
   },
 
@@ -136,11 +166,59 @@ export const simulationStore = {
       activePresetId: "balanced",
       lastEvaluatedAt: Date.now(),
     };
+    currentApiStatus = "idle";
+    currentApiError = null;
     evaluateAndUpdate();
   },
 
-  runSimulation() {
-    evaluateAndUpdate();
+  /**
+   * Orchestrates simulation execution with the FastAPI backend.
+   * If the backend is running, updates state with live backend decision JSON.
+   * If the backend is unreachable or returns an error, safely falls back
+   * to deterministic client evaluation without crashing the application.
+   */
+  async runSimulation(): Promise<DecisionResult> {
+    if (currentApiStatus === "running") {
+      return currentDecisionResult;
+    }
+
+    currentApiStatus = "running";
+    currentApiError = null;
+    notify();
+
+    try {
+      const backendDecision = await submitSimulationToBackend(currentSimulationState);
+      currentDecisionResult = backendDecision;
+      currentApiStatus = "success";
+      currentDecisionSource = "backend";
+      currentApiError = null;
+      currentSimulationState = {
+        ...currentSimulationState,
+        lastEvaluatedAt: Date.now(),
+      };
+      notify();
+      return backendDecision;
+    } catch (err: unknown) {
+      // Graceful offline fallback: Never crash the frontend if backend is offline
+      const msg = err instanceof Error ? err.message : "Backend unavailable";
+      currentApiStatus = "error";
+      currentApiError = msg;
+      currentDecisionSource = "client";
+
+      // Compute local evaluation as reliable fallback
+      currentDecisionResult = evaluateOffloadingDecision(
+        currentSimulationState.task,
+        currentSimulationState.device,
+        currentSimulationState.edge,
+        currentSimulationState.cloud
+      );
+      currentSimulationState = {
+        ...currentSimulationState,
+        lastEvaluatedAt: Date.now(),
+      };
+      notify();
+      return currentDecisionResult;
+    }
   },
 };
 
@@ -158,6 +236,24 @@ export function useSimulationState() {
     simulationStore.getDecision
   );
 
+  const apiStatus = useSyncExternalStore(
+    simulationStore.subscribe,
+    simulationStore.getApiStatus,
+    simulationStore.getApiStatus
+  );
+
+  const apiError = useSyncExternalStore(
+    simulationStore.subscribe,
+    simulationStore.getApiError,
+    simulationStore.getApiError
+  );
+
+  const decisionSource = useSyncExternalStore(
+    simulationStore.subscribe,
+    simulationStore.getDecisionSource,
+    simulationStore.getDecisionSource
+  );
+
   const updateTask = useCallback((u: Partial<SimulationTaskState>) => simulationStore.updateTask(u), []);
   const updateDevice = useCallback((u: Partial<SimulationDeviceState>) => simulationStore.updateDevice(u), []);
   const updateEdge = useCallback((u: Partial<SimulationEdgeState>) => simulationStore.updateEdge(u), []);
@@ -169,6 +265,9 @@ export function useSimulationState() {
   return {
     state,
     decision,
+    apiStatus,
+    apiError,
+    decisionSource,
     updateTask,
     updateDevice,
     updateEdge,

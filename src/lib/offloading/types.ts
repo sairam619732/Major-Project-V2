@@ -60,4 +60,9 @@ export interface DecisionResult {
   reason: string;
   summary: string;
   isSimulated: boolean;
+  method?: string;
+  confidence?: number;
+  qValues?: Record<string, number>;
+  isFallback?: boolean;
 }
+
