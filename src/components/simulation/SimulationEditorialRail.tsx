@@ -360,7 +360,7 @@ export function SimulationCompactControls() {
 // BOTTOM RESULT STRIP: LIVE DECISION / SCORES / CTA
 // ==================================================
 export function SimulationBottomResultStrip() {
-  const { decision, reset, runSimulation } = useSimulationState();
+  const { decision, reset, runSimulation, apiStatus, apiError } = useSimulationState();
   const selectedTarget = decision.selectedTarget;
 
   const targetColor = {
@@ -374,9 +374,34 @@ export function SimulationBottomResultStrip() {
       {/* 1. Live Decision & Selected Environment */}
       <div className="flex items-center gap-4 flex-shrink-0">
         <div className="flex flex-col">
-          <span className="font-mono text-[11px] tracking-[0.18em] uppercase text-cyan-400 font-bold">
-            {"// LIVE DECISION"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] tracking-[0.18em] uppercase text-cyan-400 font-bold">
+              {"// LIVE DECISION"}
+            </span>
+            {apiStatus === "running" && (
+              <span className="font-mono text-[9px] tracking-wider text-cyan-300 uppercase px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-400/50 animate-pulse">
+                RUNNING...
+              </span>
+            )}
+            {apiStatus === "success" && (
+              <span className="font-mono text-[9px] tracking-wider text-emerald-300 uppercase px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-400/50">
+                {decision.method === "dqn"
+                  ? `DQN AGENT ${decision.confidence ? `(${Math.round(decision.confidence * 100)}%)` : ""}`
+                  : decision.method === "rule_based_fallback"
+                  ? "RULE FALLBACK"
+                  : "API // SYNCED"}
+              </span>
+            )}
+
+            {apiStatus === "error" && (
+              <span
+                className="font-mono text-[9px] tracking-wider text-amber-300 uppercase px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-400/50 cursor-help"
+                title={apiError || "Backend offline - Using local engine fallback"}
+              >
+                OFFLINE FALLBACK
+              </span>
+            )}
+          </div>
           <span className="font-mono text-[11px] tracking-[0.12em] uppercase text-slate-400 font-medium">
             SELECTED ENVIRONMENT
           </span>
@@ -443,10 +468,25 @@ export function SimulationBottomResultStrip() {
         <button
           type="button"
           onClick={runSimulation}
-          className="run-simulation px-6 py-3 rounded border border-cyan-400/80 bg-gradient-to-r from-cyan-950/80 to-[#031c26] hover:border-cyan-300 text-cyan-100 font-mono text-[13px] tracking-[0.12em] uppercase font-bold transition-all shadow-[0_0_20px_-4px_rgba(6,182,212,0.40)] hover:scale-[1.02] cursor-pointer flex items-center gap-2"
+          disabled={apiStatus === "running"}
+          aria-busy={apiStatus === "running"}
+          className={`run-simulation px-6 py-3 rounded border font-mono text-[13px] tracking-[0.12em] uppercase font-bold transition-all flex items-center gap-2 ${
+            apiStatus === "running"
+              ? "border-cyan-500/50 bg-cyan-950/40 text-cyan-300/70 cursor-wait opacity-80"
+              : "border-cyan-400/80 bg-gradient-to-r from-cyan-950/80 to-[#031c26] hover:border-cyan-300 text-cyan-100 shadow-[0_0_20px_-4px_rgba(6,182,212,0.40)] hover:scale-[1.02] cursor-pointer"
+          }`}
         >
-          <span>RUN SIMULATION</span>
-          <span className="text-cyan-300">→</span>
+          {apiStatus === "running" ? (
+            <>
+              <span className="inline-block animate-spin text-cyan-300">◌</span>
+              <span>RUNNING...</span>
+            </>
+          ) : (
+            <>
+              <span>RUN SIMULATION</span>
+              <span className="text-cyan-300">→</span>
+            </>
+          )}
         </button>
         <button
           type="button"

@@ -11,12 +11,14 @@ const NAV_ITEMS = [
   { label: "CLOUD", href: "/#cloud" },
   { label: "DECISION", href: "/#decision" },
   { label: "SIMULATION", href: "/simulation" },
+  { label: "RESEARCH", href: "/research" },
 ];
 
 export function Navigation() {
   const pathname = usePathname();
   const router = useRouter();
   const isSimulation = pathname === "/simulation";
+  const isResearch = pathname === "/research";
 
   const handleNavClick = (
     e: React.MouseEvent<HTMLAnchorElement>,
@@ -55,7 +57,8 @@ export function Navigation() {
         {NAV_ITEMS.map((item) => {
           const isActive =
             (item.label === "SIMULATION" && isSimulation) ||
-            (item.label === "OVERVIEW" && !isSimulation);
+            (item.label === "RESEARCH" && isResearch) ||
+            (item.label === "OVERVIEW" && !isSimulation && !isResearch);
 
           return (
             <Link
@@ -76,3 +79,4 @@ export function Navigation() {
     </header>
   );
 }
+
