@@ -20,6 +20,90 @@ export interface BackendSimulationResponse {
   is_fallback?: boolean;
 }
 
+export interface ObjectDetectionItem {
+  label: string;
+  confidence: number;
+  box_normalized: [number, number, number, number];
+  box_pixels?: [number, number, number, number];
+}
+
+export interface ImageMetadata {
+  width: number;
+  height: number;
+  size_bytes: number;
+  size_mb: number;
+  format: string;
+  mode: string;
+  pixel_count: number;
+  estimated_cpu_demand: number;
+  estimated_memory_demand: number;
+}
+
+export interface BatchItemResult {
+  filename: string;
+  size_mb: number;
+  detection_count: number;
+  inference_time_ms: number;
+  detections: ObjectDetectionItem[];
+}
+
+export interface SimulationExecutionResult {
+  task_id: string;
+  task_type: string;
+  decision: "LOCAL" | "EDGE" | "CLOUD";
+  action_index: number;
+  confidence: number;
+  q_values: Record<string, number>;
+  execution_environment: string;
+  environment_description: string;
+  is_simulated_distributed: boolean;
+  detections: ObjectDetectionItem[];
+  detection_count: number;
+  annotated_image_base64?: string;
+  image_metadata: ImageMetadata;
+  execution_time_ms: number;
+  latency_ms: number;
+  energy: number;
+  cost: number;
+  reward: number;
+  deadline_penalty: number;
+  feasible: boolean;
+  success: boolean;
+  model_architecture: string;
+  candidateScores?: Record<ExecutionTarget, CandidateScore>;
+  reason?: string;
+  summary?: string;
+  // Phase 14: Real Task Execution & Offloaded Metrics
+  execution_worker?: string;
+  workload_type?: string;
+  input_size_mb?: number;
+  processing_time_ms?: number;
+  network_transfer_ms?: number;
+  processed_count?: number;
+  batch_items?: BatchItemResult[];
+  status?: string;
+  error_message?: string;
+}
+
+export interface LocalTelemetryResponse {
+  status: string;
+  timestamp: number;
+  platform: string;
+  cpu_count: number;
+  cpu_available: number;
+  cpu_load: number;
+  cpu_is_real: boolean;
+  memory_available: number;
+  memory_total_gb: number;
+  memory_is_real: boolean;
+  battery_pct: number | null;
+  battery_status: string;
+  battery_is_real: boolean;
+  base_latency_ms: number;
+  latency_is_real: boolean;
+  host_type: string;
+}
+
 export interface BackendHealthResponse {
   status: string;
   service: string;
@@ -180,6 +264,145 @@ export async function submitSimulationToBackend(
       ? err.message
       : "Network connection refused";
     throw new BackendApiError(`FastAPI backend connection error: ${msg}`);
+  }
+}
+
+/**
+ * Submits an uploaded workload task (single image, image batch, or video) for
+ * real neural execution and automatic DQN offloading.
+ * Automatically extracts features on the backend, selects LOCAL, EDGE, or CLOUD via trained DQN,
+ * executes neural processing on the selected tier worker (Local in-process, Edge port 8001, or Cloud port 8002),
+ * and returns real empirical latency, processing times, transfer times, and detections.
+ */
+export async function executeTaskOffloading(
+  fileOrFiles:
+    | File
+    | Blob
+    | (File | Blob)[]
+    | {
+        files: File | Blob | (File | Blob)[];
+        workloadType?: "IMAGE" | "IMAGE_BATCH" | "VIDEO";
+        state: SimulationState;
+      },
+  stateFallback?: SimulationState,
+  timeoutMs = 45000
+): Promise<SimulationExecutionResult> {
+  const baseUrl = getBackendBaseUrl();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let rawFiles: (File | Blob)[] = [];
+  let workloadType = "IMAGE";
+  let state: SimulationState;
+
+  if (fileOrFiles && typeof fileOrFiles === "object" && "state" in fileOrFiles) {
+    state = fileOrFiles.state;
+    workloadType = fileOrFiles.workloadType || "IMAGE";
+    const f = fileOrFiles.files;
+    rawFiles = Array.isArray(f) ? f : [f];
+  } else if (Array.isArray(fileOrFiles)) {
+    rawFiles = fileOrFiles;
+    state = stateFallback!;
+    workloadType = "IMAGE_BATCH";
+  } else {
+    rawFiles = [fileOrFiles as File | Blob];
+    state = stateFallback!;
+    workloadType = "IMAGE";
+  }
+
+  const formData = new FormData();
+  for (let i = 0; i < rawFiles.length; i++) {
+    const item = rawFiles[i];
+    const defaultName = workloadType === "VIDEO" ? "video.mp4" : `task_image_${i + 1}.jpg`;
+    const fname = item instanceof File ? item.name : defaultName;
+    formData.append("files", item, fname);
+    if (i === 0) {
+      formData.append("file", item, fname);
+    }
+  }
+
+  formData.append("workload_type", workloadType);
+  formData.append("task_id", state.task.id || "TASK_CV_001");
+  formData.append("deadline_ms", state.task.deadlineMs.toString());
+  formData.append("priority", state.task.priority.toString());
+  formData.append("device_cpu_available", state.device.cpuAvailablePct.toString());
+  formData.append("device_memory_available", state.device.memoryAvailablePct.toString());
+  formData.append("device_battery_level", state.device.batteryPct.toString());
+  formData.append("device_base_latency", state.device.latencyMs.toString());
+  formData.append("edge_cpu_load", state.edge.cpuLoadPct.toString());
+  formData.append("edge_task_queue", state.edge.queueLength.toString());
+  formData.append("edge_network_latency", state.edge.latencyMs.toString());
+  formData.append("edge_bandwidth", state.edge.bandwidthGbps.toString());
+  formData.append("cloud_cpu_load", state.cloud.cpuLoadPct.toString());
+  formData.append("cloud_task_queue", state.cloud.queueLength.toString());
+  formData.append("cloud_network_latency", state.cloud.latencyMs.toString());
+  formData.append("cloud_bandwidth", state.cloud.bandwidthGbps.toString());
+
+  try {
+    const res = await fetch(`${baseUrl}/api/simulation/execute`, {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      let errorMsg = `Simulation task execution failed with status ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.detail) {
+          errorMsg = typeof errJson.detail === "string" ? errJson.detail : JSON.stringify(errJson.detail);
+        }
+      } catch {}
+      throw new BackendApiError(errorMsg, res.status);
+    }
+
+    const data = (await res.json()) as SimulationExecutionResult;
+    return data;
+  } catch (err: unknown) {
+    clearTimeout(timeoutId);
+    if (err instanceof BackendApiError) {
+      throw err;
+    }
+    const isAbort = err instanceof DOMException && err.name === "AbortError";
+    const msg = isAbort
+      ? `Task execution request timed out after ${timeoutMs}ms`
+      : err instanceof Error
+      ? err.message
+      : "Network connection refused";
+    throw new BackendApiError(`FastAPI execution connection error: ${msg}`);
+  }
+}
+
+/**
+ * Fetches real local machine hardware telemetry from the FastAPI backend.
+ * Uses psutil to sample actual CPU %, RAM %, and power/battery status.
+ */
+export async function fetchLocalTelemetry(timeoutMs = 3000): Promise<LocalTelemetryResponse> {
+  const baseUrl = getBackendBaseUrl();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${baseUrl}/api/simulation/telemetry/local`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      throw new BackendApiError(`Local telemetry request failed with status ${res.status}`, res.status);
+    }
+
+    return (await res.json()) as LocalTelemetryResponse;
+  } catch (err: unknown) {
+    clearTimeout(timeoutId);
+    if (err instanceof BackendApiError) {
+      throw err;
+    }
+    const msg = err instanceof Error ? err.message : "Failed to fetch local telemetry";
+    throw new BackendApiError(msg);
   }
 }
 

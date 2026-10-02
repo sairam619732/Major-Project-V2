@@ -11,13 +11,42 @@ import {
   DecisionResult,
 } from "@/lib/offloading/types";
 
-// Extended Simulation Task State with Priority
+// Workload Input Types (Phase 13B)
+export type WorkloadInputType = "IMAGE" | "IMAGE_BATCH" | "VIDEO";
+
+export interface UploadedFileItem {
+  id: string;
+  file: File;
+  name: string;
+  sizeBytes: number;
+  sizeMb: number;
+  previewUrl?: string;
+}
+
+export interface VideoMetadata {
+  durationSeconds?: number;
+  width?: number;
+  height?: number;
+  resolution?: string;
+}
+
+export interface WorkloadTaskPayload {
+  type: WorkloadInputType;
+  files: UploadedFileItem[];
+  totalSizeMb: number;
+  imageCount?: number;
+  videoMetadata?: VideoMetadata;
+}
+
+// Extended Simulation Task State with Priority & Workload Payload
 export interface SimulationTaskState extends TaskState {
   priority: number; // 1-5, default 3
+  workloadType?: WorkloadInputType;
+  workloadPayload?: WorkloadTaskPayload;
 }
 
 // Extended Simulation Device (Local) State
-export interface SimulationDeviceState extends DeviceState {}
+export type SimulationDeviceState = DeviceState;
 
 // Extended Simulation Edge State
 export interface SimulationEdgeState extends EdgeState {
@@ -29,6 +58,17 @@ export interface SimulationCloudState extends CloudState {
   memoryAvailablePct: number; // 0-100%, default 78%
 }
 
+export type WorkloadLevel = "LOW" | "MEDIUM" | "HIGH";
+export type NetworkConditionLevel = "GOOD" | "LIMITED" | "POOR";
+
+// Explicit Simulation Scenario Input Controls (Phase 13D)
+export interface ExperimentConditions {
+  localWorkload: WorkloadLevel;
+  edgeCongestion: WorkloadLevel;
+  cloudLoad: WorkloadLevel;
+  networkCondition: NetworkConditionLevel;
+}
+
 // Complete Simulation Input State (Future-compatible with TelemetryState)
 export interface SimulationState {
   task: SimulationTaskState;
@@ -38,6 +78,7 @@ export interface SimulationState {
   isSimulated: boolean;
   activePresetId: string | null;
   lastEvaluatedAt: number;
+  experimentConditions?: ExperimentConditions;
 }
 
 // Future Backend Telemetry Structure (Compatible interface)
