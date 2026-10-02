@@ -1,6 +1,6 @@
 """Pydantic schemas for the simulation evaluation API."""
 
-from typing import Dict, Union, Optional
+from typing import Dict, Union, Optional, List, Any
 from pydantic import BaseModel, Field
 from app.models.task import TaskPriority
 from app.models.system import LocalNodeState, EdgeNodeState, CloudNodeState
@@ -100,4 +100,74 @@ class SimulationResponse(BaseModel):
     confidence: Optional[float] = Field(default=None, description="Boltzmann Softmax confidence score [0.3333, 1.0]")
     q_values: Optional[Dict[str, float]] = Field(default=None, description="Estimated Q-values for local, edge, and cloud")
     is_fallback: bool = Field(default=False, description="True if fallback policy was executed")
+
+
+class ObjectDetectionResultItem(BaseModel):
+    """Individual object detection candidate with bounding coordinates and confidence."""
+
+    label: str = Field(..., description="COCO semantic class name")
+    confidence: float = Field(..., description="Detector confidence score [0.0, 1.0]")
+    box_normalized: List[float] = Field(
+        ...,
+        description="Bounding coordinates normalized to [0.0, 1.0] as [ymin, xmin, ymax, xmax]",
+    )
+    box_pixels: Optional[List[float]] = Field(
+        default=None,
+        description="Bounding coordinates in pixel units [xmin, ymin, xmax, ymax]",
+    )
+
+
+class ImageMetadataSchema(BaseModel):
+    """Extracted physical and computational attributes of the uploaded image."""
+
+    width: int
+    height: int
+    size_bytes: int
+    size_mb: float
+    format: str
+    mode: str
+    pixel_count: int
+    estimated_cpu_demand: float
+    estimated_memory_demand: float
+
+
+class SimulationExecuteResponse(BaseModel):
+    """Structured response for unified image offloading and real CV execution."""
+
+    task_id: str
+    task_type: str
+    decision: str = Field(..., description="'LOCAL' | 'EDGE' | 'CLOUD'")
+    action_index: int = Field(..., description="0 for LOCAL, 1 for EDGE, 2 for CLOUD")
+    confidence: float = Field(..., description="DQN policy action confidence")
+    q_values: Dict[str, float] = Field(..., description="Q-values computed across candidate actions")
+    execution_environment: str = Field(..., description="Human-readable execution environment label")
+    environment_description: str = Field(..., description="Environment execution details")
+    is_simulated_distributed: bool = Field(..., description="True if simulated Edge or Cloud offload")
+    detections: List[ObjectDetectionResultItem] = Field(default_factory=list)
+    detection_count: int
+    annotated_image_base64: Optional[str] = Field(default=None, description="Base64 encoded JPEG with rendered bounding boxes")
+    image_metadata: Optional[ImageMetadataSchema] = Field(default=None, description="Image physical attributes")
+    execution_time_ms: float = Field(..., description="Measured neural inference runtime in milliseconds")
+    latency_ms: float = Field(..., description="Total multi-tier latency including transmission")
+    energy: float = Field(..., description="Energy consumption in Joules")
+    cost: float = Field(..., description="Monetary/resource cost index")
+    reward: float = Field(..., description="DQN step reward value")
+    deadline_penalty: float = Field(default=0.0)
+    feasible: bool = Field(..., description="Whether execution satisfied deadline and memory constraints")
+    success: bool = Field(default=True)
+    model_architecture: str = Field(..., description="Neural network detector architecture")
+    candidateScores: Optional[Dict[str, CandidateScoreSchema]] = Field(default=None)
+    reason: Optional[str] = Field(default=None)
+    summary: Optional[str] = Field(default=None)
+    # Phase 14 Execution Architecture Metrics
+    execution_worker: str = Field(default="local-host-device", description="Worker service node handling execution")
+    workload_type: str = Field(default="IMAGE", description="'IMAGE' | 'IMAGE_BATCH' | 'VIDEO'")
+    input_size_mb: float = Field(default=0.0, description="Payload size in megabytes")
+    processing_time_ms: float = Field(default=0.0, description="Measured neural processing time in milliseconds")
+    network_transfer_ms: float = Field(default=0.0, description="Network transmission round-trip overhead in ms")
+    processed_count: int = Field(default=1, description="Number of images or sampled frames processed")
+    batch_items: Optional[List[Dict[str, Any]]] = Field(default=None, description="Per-item or per-frame detailed breakdown")
+    status: str = Field(default="SUCCESS", description="Task execution status: SUCCESS or FAILED")
+    error_message: Optional[str] = Field(default=None, description="Failure description if failed")
+
 

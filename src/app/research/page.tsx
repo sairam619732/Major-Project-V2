@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
+import { Navigation } from "@/components/ui/Navigation";
 import { fetchBenchmarkReport } from "@/services/apiClient";
 import { BenchmarkReportData } from "@/types/benchmark";
 import {
@@ -13,10 +13,6 @@ import {
   ResearchFindings,
 } from "@/components/research";
 import styles from "./research.module.css";
-
-const sans = Geist({ subsets: ["latin"], variable: "--font-sans" });
-const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
-const display = Space_Grotesk({ subsets: ["latin"], variable: "--font-display" });
 
 export default function ResearchPage() {
   const [data, setData] = useState<BenchmarkReportData | null>(null);
@@ -42,33 +38,71 @@ export default function ResearchPage() {
   }, [loadData]);
 
   return (
-    <div
-      className={`${styles.researchPage} ${sans.variable} ${mono.variable} ${display.variable} selection:bg-sky-500/20 selection:text-sky-300`}
-    >
-      <main className={styles.mainContent}>
-        {/* Header Block */}
-        <ResearchHeader
-          metadata={data?.metadata}
-          dataSource={data?.dataSource}
-          onRefresh={loadData}
-          isLoading={loading}
-        />
+    <div className={styles.researchPage}>
+      {/* 1. Atmospheric Ambient Background */}
+      <div className={styles.ambientBackground} />
+      <div className={styles.gridOverlay} />
+
+      {/* 2. Global Top Navigation (Preserved exactly) */}
+      <Navigation />
+
+      {/* 3. Subtle Side Research Progress Indicator (Desktop only) */}
+      <nav className={styles.sideRail} aria-label="Research sections navigation">
+        <a href="#overview" className={styles.sideRailItem}>
+          <span className={styles.sideRailDot} />
+          <span>01 Overview</span>
+        </a>
+        <a href="#configuration" className={styles.sideRailItem}>
+          <span className={styles.sideRailDot} />
+          <span>02 Configuration</span>
+        </a>
+        <a href="#policy-behavior" className={styles.sideRailItem}>
+          <span className={styles.sideRailDot} />
+          <span>03 Policy</span>
+        </a>
+        <a href="#comparison" className={styles.sideRailItem}>
+          <span className={styles.sideRailDot} />
+          <span>04 Performance</span>
+        </a>
+        <a href="#convergence" className={styles.sideRailItem}>
+          <span className={styles.sideRailDot} />
+          <span>05 Training</span>
+        </a>
+        <a href="#summary" className={styles.sideRailItem}>
+          <span className={styles.sideRailDot} />
+          <span>06 Summary</span>
+        </a>
+      </nav>
+
+      {/* 4. Main Long-Form Document Flow */}
+      <main className={styles.mainContainer}>
+        {/* PAGE HEADER & SECTION 01 — RESEARCH OVERVIEW */}
+        <section className="relative">
+          <ResearchHeader
+            metadata={data?.metadata}
+            dataSource={data?.dataSource}
+            onRefresh={loadData}
+            isLoading={loading}
+          />
+        </section>
 
         {/* Loading State */}
         {loading && !data && (
-          <div className="py-24 text-center space-y-3 font-mono text-xs text-slate-500">
-            <div className="inline-block w-6 h-6 border-2 border-sky-400/30 border-t-sky-400 rounded-full animate-spin mb-2" />
-            <p className="tracking-widest uppercase">LOADING EXPERIMENTAL DATA...</p>
+          <div className="py-32 text-center space-y-4 font-mono text-xs text-slate-500">
+            <div className="inline-block w-8 h-8 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+            <p className="tracking-[0.25em] uppercase text-slate-400">
+              RETRIEVING EMPIRICAL RESEARCH DATASET...
+            </p>
           </div>
         )}
 
         {/* Error / Data Unavailable State */}
         {error && !data && (
-          <div className="my-16 p-12 text-center border border-dashed border-red-500/20 rounded-[2px] bg-red-950/10 space-y-4">
-            <span className="font-mono text-xs uppercase tracking-widest text-red-400 block">
+          <div className="my-24 p-12 text-center border border-dashed border-red-500/25 rounded-[2px] bg-red-950/10 space-y-4">
+            <span className="font-mono text-xs uppercase tracking-[0.25em] text-red-400 block font-semibold">
               // EXPERIMENTAL DATA UNAVAILABLE
             </span>
-            <p className="text-sm text-slate-400 max-w-lg mx-auto leading-relaxed">
+            <p className="text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
               The benchmark results could not be retrieved from the backend API or local dataset.
               Ensure the FastAPI server or Phase 15 benchmark outputs are accessible.
             </p>
@@ -76,7 +110,7 @@ export default function ResearchPage() {
               <button
                 type="button"
                 onClick={loadData}
-                className="font-mono text-xs uppercase tracking-wider px-4 py-2 border border-white/20 hover:border-white/40 text-white rounded-[2px] transition-colors"
+                className="font-mono text-xs uppercase tracking-wider px-5 py-2.5 border border-white/20 hover:border-white/50 text-white rounded-[2px] transition-colors"
               >
                 Retry Fetch
               </button>
@@ -84,122 +118,144 @@ export default function ResearchPage() {
           </div>
         )}
 
-        {/* Main Content Sections (Rendered only when real data is loaded) */}
+        {/* Real Data Loaded: Vertically Discovered Presentation Sections */}
         {data && (
-          <div className="space-y-24 mt-16">
-            {/* SECTION 1: EXPERIMENT */}
-            <section id="experiment" className="space-y-6">
-              <div className="flex items-baseline justify-between border-b border-white/[0.08] pb-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-sky-400 font-semibold tracking-widest">
-                    01 //
-                  </span>
-                  <h2 className="font-display text-2xl text-white font-normal tracking-tight">
-                    EXPERIMENT CONFIGURATION
-                  </h2>
+          <div>
+            {/* SECTION 02 — DQN CONFIGURATION */}
+            <section id="configuration" className={`${styles.sectionWrapper} scroll-mt-28`}>
+              <div className={styles.sectionHeader}>
+                <div className={styles.sectionHeaderTop}>
+                  <div className={styles.sectionIndex}>
+                    <span>02 //</span>
+                    <span>DQN CONFIGURATION</span>
+                  </div>
+                  <span className={styles.sectionCategory}>REPRODUCIBLE SETUP</span>
                 </div>
-                <span className="font-mono text-[11px] text-slate-500 tracking-wider uppercase hidden sm:inline">
-                  REPRODUCIBLE SETUP
-                </span>
+                <h2 className={styles.sectionTitle}>DQN CONFIGURATION</h2>
+                <p className={styles.sectionSubtitle}>
+                  Reproducible setup detailing three-dimensional hyperparameter specifications,
+                  evaluation protocol parameters, and multi-objective loss coefficients.
+                </p>
               </div>
+
               <ExperimentConfigView
                 metadata={data.metadata}
                 config={data.training_config}
               />
             </section>
 
-            {/* SECTION 2: POLICY BEHAVIOR */}
-            <section id="policy-behavior" className="space-y-6">
-              <div className="flex items-baseline justify-between border-b border-white/[0.08] pb-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-sky-400 font-semibold tracking-widest">
-                    02 //
-                  </span>
-                  <h2 className="font-display text-2xl text-white font-normal tracking-tight">
-                    POLICY BEHAVIOR
-                  </h2>
+            {/* SECTION 03 — POLICY BEHAVIOR */}
+            <section id="policy-behavior" className={`${styles.sectionWrapper} scroll-mt-28`}>
+              <div className={styles.sectionHeader}>
+                <div className={styles.sectionHeaderTop}>
+                  <div className={styles.sectionIndex}>
+                    <span>03 //</span>
+                    <span>POLICY BEHAVIOR</span>
+                  </div>
+                  <span className={styles.sectionCategory}>DECISION ALLOCATION</span>
                 </div>
-                <span className="font-mono text-[11px] text-slate-500 tracking-wider uppercase hidden sm:inline">
-                  DECISION ALLOCATION
-                </span>
+                <h2 className={styles.sectionTitle}>POLICY BEHAVIOR</h2>
+                <p className={styles.sectionSubtitle}>
+                  Decision allocation across the evaluated workloads.
+                </p>
               </div>
+
               <ActionDistributionChart
-                actions={data.policies.DQN.action_distribution || data.policies.DQN.actions}
+                actions={data.policies?.DQN?.action_distribution || data.policies?.DQN?.actions}
                 totalSamples={data.metadata.total_evaluation_samples}
               />
-
             </section>
 
-            {/* SECTION 3: PERFORMANCE COMPARISON */}
-            <section id="comparison" className="space-y-6">
-              <div className="flex items-baseline justify-between border-b border-white/[0.08] pb-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-sky-400 font-semibold tracking-widest">
-                    03 //
-                  </span>
-                  <h2 className="font-display text-2xl text-white font-normal tracking-tight">
-                    PERFORMANCE COMPARISON
-                  </h2>
+            {/* SECTION 04 — PERFORMANCE COMPARISON */}
+            <section id="comparison" className={`${styles.sectionWrapper} scroll-mt-28`}>
+              <div className={styles.sectionHeader}>
+                <div className={styles.sectionHeaderTop}>
+                  <div className={styles.sectionIndex}>
+                    <span>04 //</span>
+                    <span>PERFORMANCE COMPARISON</span>
+                  </div>
+                  <span className={styles.sectionCategory}>6-POLICY BENCHMARK</span>
                 </div>
-                <span className="font-mono text-[11px] text-slate-500 tracking-wider uppercase hidden sm:inline">
-                  6-POLICY BENCHMARK
-                </span>
+                <h2 className={styles.sectionTitle}>PERFORMANCE COMPARISON</h2>
+                <p className={styles.sectionSubtitle}>
+                  6-Policy benchmark measuring latency, energy, cost, and feasibility under
+                  identical task arrival workloads.
+                </p>
               </div>
+
               <PolicyComparisonTable
                 policies={data.policies}
                 comparisons={data.comparisons}
               />
             </section>
 
-            {/* SECTION 4: TRAINING CONVERGENCE */}
-            <section id="convergence" className="space-y-6">
-              <div className="flex items-baseline justify-between border-b border-white/[0.08] pb-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-sky-400 font-semibold tracking-widest">
-                    04 //
-                  </span>
-                  <h2 className="font-display text-2xl text-white font-normal tracking-tight">
-                    TRAINING CONVERGENCE
-                  </h2>
+            {/* SECTION 05 — TRAINING CONVERGENCE */}
+            <section id="convergence" className={`${styles.sectionWrapper} scroll-mt-28`}>
+              <div className={styles.sectionHeader}>
+                <div className={styles.sectionHeaderTop}>
+                  <div className={styles.sectionIndex}>
+                    <span>05 //</span>
+                    <span>TRAINING CONVERGENCE</span>
+                  </div>
+                  <span className={styles.sectionCategory}>TRAJECTORY ANALYSIS</span>
                 </div>
-                <span className="font-mono text-[11px] text-slate-500 tracking-wider uppercase hidden sm:inline">
-                  200 EPISODES · TRAJECTORY
-                </span>
+                <h2 className={styles.sectionTitle}>TRAINING CONVERGENCE</h2>
+                <p className={styles.sectionSubtitle}>
+                  Trajectory analysis showing average reward progression across training episodes.
+                </p>
               </div>
+
               {data.training_history && data.training_history.length > 0 ? (
                 <TrainingConvergenceChart history={data.training_history} />
               ) : (
-                <div className="p-8 text-center font-mono text-xs text-slate-500 border border-white/[0.05]">
+                <div className="p-12 text-center font-mono text-xs text-slate-500 border border-white/[0.05]">
                   Training history trajectory unavailable.
                 </div>
               )}
             </section>
 
-            {/* SECTION 5 & 6: FINDINGS & LIMITATIONS */}
-            <section id="findings-limitations" className="space-y-6">
-              <div className="flex items-baseline justify-between border-b border-white/[0.08] pb-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-sky-400 font-semibold tracking-widest">
-                    05 & 06 //
-                  </span>
-                  <h2 className="font-display text-2xl text-white font-normal tracking-tight">
-                    EMPIRICAL FINDINGS & LIMITATIONS
-                  </h2>
+            {/* SECTION 06 — EVALUATION SUMMARY */}
+            <section id="summary" className={`${styles.sectionWrapper} scroll-mt-28`}>
+              <div className={styles.sectionHeader}>
+                <div className={styles.sectionHeaderTop}>
+                  <div className={styles.sectionIndex}>
+                    <span>06 //</span>
+                    <span>EVALUATION SUMMARY</span>
+                  </div>
+                  <span className={styles.sectionCategory}>EMPIRICAL FINDINGS</span>
                 </div>
-                <span className="font-mono text-[11px] text-slate-500 tracking-wider uppercase hidden sm:inline">
-                  ACADEMIC DISCUSSION
-                </span>
+                <h2 className={styles.sectionTitle}>EVALUATION SUMMARY</h2>
+                <p className={styles.sectionSubtitle}>
+                  Empirical findings and boundary conditions supported by the 500-workload evaluation dataset.
+                </p>
               </div>
+
               <ResearchFindings data={data} />
             </section>
           </div>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-white/[0.06] py-12 px-[7vw] text-center font-mono text-xs text-slate-600">
-        <p>AI-BASED DYNAMIC TASK OFFLOADING IN CLOUD-EDGE COMPUTING ENVIRONMENTS</p>
-        <p className="mt-1 text-slate-700">PHASE 16 RESEARCH BENCHMARK VISUALIZATION · REPRODUCIBLE SCIENTIFIC RESULTS</p>
+      {/* Editorial Scientific Presentation Footer */}
+      <footer className={styles.editorialFooter}>
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <p className="text-slate-300 font-semibold uppercase tracking-[0.2em]">
+              AI-BASED DYNAMIC TASK OFFLOADING IN CLOUD-EDGE COMPUTING ENVIRONMENTS
+            </p>
+            <p className="text-slate-500 text-[11px] tracking-wider">
+              PHASE 16 RESEARCH BENCHMARK VISUALIZATION · REPRODUCIBLE SCIENTIFIC RESULTS
+            </p>
+          </div>
+
+          <div className="flex items-center gap-6 text-[11px] text-slate-500 uppercase tracking-widest">
+            <span>DETERMINISTIC EVALUATION</span>
+            <span>·</span>
+            <span>PYTORCH DQN</span>
+            <span>·</span>
+            <span className="text-cyan-400">PUBLISHED REPORT</span>
+          </div>
+        </div>
       </footer>
     </div>
   );

@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/immutability -- R3F owns these mutable Three.js objects; frame callbacks update GPU resources without React renders. */
 
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Text, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -177,7 +177,8 @@ function Candidate({ target }: { target: Target }) {
     return clone;
   }, [scene, config, screen, target]);
   const resources = useMemo(() => {
-    const geometry = new THREE.BufferGeometry().setFromPoints([TASK, TASK]);
+    const initialPoints = target === "cloud" ? [TASK, TASK, TASK] : [TASK, TASK];
+    const geometry = new THREE.BufferGeometry().setFromPoints(initialPoints);
     const material = new THREE.LineBasicMaterial({ color: COLORS[target], transparent: true, opacity: .22 });
     const line = new THREE.Line(geometry, material);
     line.frustumCulled = false;
@@ -205,8 +206,15 @@ function Candidate({ target }: { target: Target }) {
     // Front-facing center of the actual world-space bounds: the line ends on the model.
     resources.anchor.z = resources.box.max.z;
     const positions = resources.geometry.attributes.position as THREE.BufferAttribute;
-    positions.setXYZ(0, TASK.x, TASK.y, TASK.z);
-    positions.setXYZ(1, resources.anchor.x, resources.anchor.y, resources.anchor.z);
+    const edgeWaypoint = new THREE.Vector3(-1.6, -1.25, 0.4);
+    if (target === "cloud") {
+      positions.setXYZ(0, TASK.x, TASK.y, TASK.z);
+      positions.setXYZ(1, edgeWaypoint.x, edgeWaypoint.y, edgeWaypoint.z);
+      positions.setXYZ(2, resources.anchor.x, resources.anchor.y, resources.anchor.z);
+    } else {
+      positions.setXYZ(0, TASK.x, TASK.y, TASK.z);
+      positions.setXYZ(1, resources.anchor.x, resources.anchor.y, resources.anchor.z);
+    }
     positions.needsUpdate = true;
     resources.material.opacity = .22 + weight.current * .68;
     resources.signal.opacity = weight.current * .95;
@@ -214,7 +222,32 @@ function Candidate({ target }: { target: Target }) {
     // Deterministic outward flow. Independent route weights crossfade when selection changes.
     for (let i = 0; i < particles.count; i++) {
       const u = (clock.elapsedTime * .34 + i / particles.count) % 1;
-      particles.setXYZ(i, THREE.MathUtils.lerp(TASK.x, resources.anchor.x, u), THREE.MathUtils.lerp(TASK.y, resources.anchor.y, u), THREE.MathUtils.lerp(TASK.z, resources.anchor.z, u));
+      if (target === "cloud") {
+        if (u < 0.5) {
+          const segU = u * 2;
+          particles.setXYZ(
+            i,
+            THREE.MathUtils.lerp(TASK.x, edgeWaypoint.x, segU),
+            THREE.MathUtils.lerp(TASK.y, edgeWaypoint.y, segU),
+            THREE.MathUtils.lerp(TASK.z, edgeWaypoint.z, segU)
+          );
+        } else {
+          const segU = (u - 0.5) * 2;
+          particles.setXYZ(
+            i,
+            THREE.MathUtils.lerp(edgeWaypoint.x, resources.anchor.x, segU),
+            THREE.MathUtils.lerp(edgeWaypoint.y, resources.anchor.y, segU),
+            THREE.MathUtils.lerp(edgeWaypoint.z, resources.anchor.z, segU)
+          );
+        }
+      } else {
+        particles.setXYZ(
+          i,
+          THREE.MathUtils.lerp(TASK.x, resources.anchor.x, u),
+          THREE.MathUtils.lerp(TASK.y, resources.anchor.y, u),
+          THREE.MathUtils.lerp(TASK.z, resources.anchor.z, u)
+        );
+      }
     }
     particles.needsUpdate = true;
     if (screen) {
@@ -241,12 +274,20 @@ function Candidate({ target }: { target: Target }) {
 }
 
 function Task() {
+  const [taskId, setTaskId] = useState(() => simulationStore.getState().task.id || "TASK_001");
+
+  useEffect(() => {
+    return simulationStore.subscribe(() => {
+      setTaskId(simulationStore.getState().task.id || "TASK_001");
+    });
+  }, []);
+
   return <group position={TASK} name="simulation-task">
     <mesh><octahedronGeometry args={[.24, 0]} /><meshStandardMaterial color="white" emissive="#38bdf8" emissiveIntensity={2} /></mesh>
     <mesh scale={1.35}><icosahedronGeometry args={[.28, 0]} /><meshBasicMaterial color="#38bdf8" wireframe transparent opacity={.8} /></mesh>
     <mesh rotation={[.4, .2, 0]}><ringGeometry args={[.45, .46, 48]} /><meshBasicMaterial color="#7dd3fc" wireframe transparent opacity={.7} /></mesh>
     <mesh rotation={[-.4, .35, 0]}><ringGeometry args={[.56, .57, 48]} /><meshBasicMaterial color="#7dd3fc" wireframe transparent opacity={.7} /></mesh>
-    <group position={[0, -.75, 0]}><Label color="#7dd3fc">TASK_001</Label></group>
+    <group position={[0, -.75, 0]}><Label color="#7dd3fc">{taskId}</Label></group>
   </group>;
 }
 
