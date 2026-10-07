@@ -1,9 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
-import { SimulationCompactControls, SimulationBottomResultStrip } from "@/components/simulation/SimulationEditorialRail";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { SimulationSceneCanvas } from "@/components/simulation/SimulationSceneCanvas";
+import { SimulationPipeline } from "@/components/simulation/SimulationPipeline";
+import { SimulationTaskPayload } from "@/components/simulation/SimulationTaskPayload";
+import { SimulationConfig } from "@/components/simulation/SimulationConfig";
+import { SimulationTelemetryPanel } from "@/components/simulation/SimulationTelemetryPanel";
+import { SimulationResultsPanel } from "@/components/simulation/SimulationResultsPanel";
+import { SimulationDqnDecisionOverlay } from "@/components/simulation/SimulationDqnDecisionOverlay";
+import { SimulationEdgeTelemetryOverlay, SimulationCloudTelemetryOverlay } from "@/components/simulation/SimulationTelemetryOverlays";
 import styles from "./simulation.module.css";
 
 const sans = Geist({ subsets: ["latin"], variable: "--font-sim-sans" });
@@ -12,28 +18,55 @@ const display = Space_Grotesk({ subsets: ["latin"], variable: "--font-sim-displa
 
 export default function SimulationPage() {
   return (
-    <main className={`${styles.instrument} ${sans.variable} ${mono.variable} ${display.variable}`}>
-      <header className={styles.header}>
-        <Link href="/#decision">← RETURN TO STORY</Link>
-        <span>SYS // OFFLOAD</span>
-        <span className={styles.mode}>SIMULATION MODE</span>
-      </header>
-      <div className={styles.workspace}>
-        <div className={styles.left}>
-          <div className={styles.intro}>
-            <span className={styles.eyebrow}>{"// RESEARCH INSTRUMENT"}</span>
-            <h1>SIMULATION</h1>
-            <p className={styles.subtitle}>Test dynamic offloading under changing conditions.</p>
-            <p className={styles.description}>Adjust task and system conditions to observe how the execution strategy responds across local, edge and cloud.</p>
-            <p className={styles.metadata}>TASK_001 · SIMULATED ENVIRONMENT · DEMO VALUES</p>
+    <DashboardLayout>
+       <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-bold font-sans tracking-tight">Simulation</h1>
+          <p className="text-[14px] text-slate-400">Test dynamic offloading under changing conditions</p>
+       </div>
+       
+       <SimulationPipeline />
+       
+       {/* Grid Layout */}
+       <div className="flex flex-col lg:flex-row gap-8">
+          
+          {/* Left Main */}
+          <div className="flex-1 flex flex-col gap-8 min-w-0">
+             
+             {/* Row 1: Upload + Config */}
+             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <SimulationTaskPayload />
+                <SimulationConfig />
+             </div>
+             
+             {/* Row 2: 3D Topology */}
+             <div className="flex flex-col bg-[#060b14] border border-white/[0.05] rounded-xl overflow-hidden relative shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+                <div className="px-5 py-4 border-b border-white/[0.05] flex items-center justify-between bg-black/20">
+                   <div className="flex items-center gap-3">
+                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-400"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                     <span className="font-bold text-[15px] text-slate-200">Offloading Flow Visualization</span>
+                   </div>
+                   <span className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-[11px] font-bold uppercase"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> Live Execution</span>
+                </div>
+                
+                <div className="h-[450px] w-full relative">
+                   {/* Floating Telemetry Overlays inside 3D canvas */}
+                   <SimulationEdgeTelemetryOverlay />
+                   <SimulationCloudTelemetryOverlay />
+
+                   <SimulationSceneCanvas />
+                   <SimulationDqnDecisionOverlay />
+                </div>
+             </div>
+             
+             {/* Row 3: Results */}
+             <SimulationResultsPanel />
           </div>
-          <div className={styles.controls}><SimulationCompactControls /></div>
-        </div>
-        <section className={styles.stage} aria-label="Live local, edge and cloud offloading topology">
-          <SimulationSceneCanvas />
-        </section>
-      </div>
-      <footer className={styles.footer}><SimulationBottomResultStrip /></footer>
-    </main>
+          
+          {/* Right Sidebar (Telemetry) */}
+          <div className="w-full lg:w-[320px] xl:w-[360px] flex-shrink-0 flex flex-col gap-8">
+             <SimulationTelemetryPanel />
+          </div>
+       </div>
+    </DashboardLayout>
   );
 }

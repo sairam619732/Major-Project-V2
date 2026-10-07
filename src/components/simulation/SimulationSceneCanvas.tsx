@@ -10,7 +10,7 @@ import { simulationStore } from "@/lib/simulation/simulationState";
 import { SparseDeepSpaceStars } from "@/components/3d/SparseDeepSpaceStars";
 
 type Target = "local" | "edge" | "cloud";
-const COLORS = { local: "#fbbf24", edge: "#34d399", cloud: "#a78bfa" };
+const COLORS = { local: "#38bdf8", edge: "#34d399", cloud: "#a78bfa" };
 const MODELS = {
   local: { url: "/assets/device/sci_fi_tablet.glb", position: [0, 2.05, 0], rotation: [1.72, 0, 0], size: 2.85 },
   edge: { url: "/assets/edge/data_center_rack.glb", position: [-1.6, -1.25, 0], rotation: [0.12, -1.9, 0], size: 2.3 },
@@ -23,7 +23,8 @@ function FitCamera() {
   useLayoutEffect(() => {
     const ortho = camera as THREE.OrthographicCamera;
     // Fit the whole topology, including labels, to either canvas dimension.
-    ortho.zoom = Math.min(size.width / 6.5, size.height / 6.5);
+    // Decrease denominator to increase visual scale (zoom in).
+    ortho.zoom = Math.min(size.width / 5.2, size.height / 5.2);
     ortho.updateProjectionMatrix();
   }, [camera, size]);
   return null;
@@ -31,8 +32,8 @@ function FitCamera() {
 
 function Label({ children, color = "#94a3b8" }: { children: React.ReactNode; color?: string }) {
   const { size } = useThree();
-  // Match the existing 12px labels under FitCamera's orthographic framing.
-  const pixelsPerUnit = Math.min(size.width / 6.5, size.height / 6.5);
+  // Match the existing labels under FitCamera's orthographic framing.
+  const pixelsPerUnit = Math.min(size.width / 5.2, size.height / 5.2);
   return (
     <Text
       font="/fonts/GeistMono-Medium.ttf"
@@ -64,7 +65,7 @@ function renderTabletCanvas(
   ctx.fillRect(0, 0, width, height);
 
   // Technical grid
-  ctx.strokeStyle = "rgba(245, 158, 11, 0.14)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.14)";
   ctx.lineWidth = 1.5;
   for (let x = 0; x <= width; x += 36) {
     ctx.beginPath();
@@ -80,17 +81,17 @@ function renderTabletCanvas(
   }
 
   // Border & brackets
-  ctx.strokeStyle = isSelected ? "rgba(245, 158, 11, 0.95)" : "rgba(245, 158, 11, 0.65)";
+  ctx.strokeStyle = isSelected ? "rgba(56, 189, 248, 0.95)" : "rgba(56, 189, 248, 0.65)";
   ctx.lineWidth = isSelected ? 4 : 3;
   ctx.strokeRect(28, 28, width - 56, height - 56);
 
   // Title
-  ctx.fillStyle = "#fbbf24";
+  ctx.fillStyle = "#38bdf8";
   ctx.font = "bold 34px 'Geist Mono', ui-monospace, monospace";
   ctx.fillText("LOCAL RUNTIME // ON-CHIP NPU", 56, 92);
 
   // Separator
-  ctx.strokeStyle = "rgba(245, 158, 11, 0.40)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.40)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(56, 120);
@@ -98,30 +99,31 @@ function renderTabletCanvas(
   ctx.stroke();
 
   // Metrics
-  ctx.fillStyle = "rgba(253, 230, 138, 0.95)";
+  ctx.fillStyle = "rgba(186, 230, 253, 0.95)";
   ctx.font = "bold 30px 'Geist Mono', ui-monospace, monospace";
   ctx.fillText(`CPU AVAIL:  ${device.cpuAvailablePct}%`, 56, 190);
   ctx.fillText(`MEM AVAIL:  ${device.memoryAvailablePct}%`, 56, 260);
 
-  ctx.fillStyle = device.batteryPct < 25 ? "#ef4444" : "#f59e0b";
+  ctx.fillStyle = device.batteryPct < 25 ? "#ef4444" : "#38bdf8";
   ctx.fillText(
     `BATTERY:    ${device.batteryPct}% [${device.batteryPct < 30 ? "DRAIN RISK" : "NOMINAL"}]`,
     56,
     330
   );
 
-  ctx.fillStyle = "rgba(253, 230, 138, 0.95)";
+  ctx.fillStyle = "rgba(186, 230, 253, 0.95)";
   ctx.fillText(`LATENCY:    ${device.latencyMs} MS`, 56, 400);
 
-  ctx.fillStyle = "#fbbf24";
+  ctx.fillStyle = "#38bdf8";
   ctx.font = "bold 32px 'Geist Mono', ui-monospace, monospace";
   ctx.fillText(`COST SCORE: ${score}`, 56, 480);
 
-  ctx.fillStyle = isSelected ? "#34d399" : "rgba(245, 158, 11, 0.85)";
+  ctx.fillStyle = isSelected ? "#34d399" : "rgba(56, 189, 248, 0.85)";
   ctx.font = "24px 'Geist Mono', ui-monospace, monospace";
   ctx.fillText(
     isSelected ? "STATUS: >> ACTIVE OFFLOAD TARGET <<" : "STATUS: EVALUATION CANDIDATE",
     56,
+    126,
     570
   );
 }

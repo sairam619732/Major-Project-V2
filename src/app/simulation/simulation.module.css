@@ -2,111 +2,96 @@
   --font-geist-sans: var(--font-sim-sans);
   --font-geist-mono: var(--font-sim-mono);
   --font-space-grotesk: var(--font-sim-display);
+
   min-height: 100vh;
-  min-height: 100svh;
   width: 100%;
   display: flex;
   flex-direction: column;
-  background: #02040a;
-  color: #f1f5f9;
+  background: #020617; /* Very dark navy / almost black */
+  color: #f8fafc;
   font-family: var(--font-geist-sans);
 }
 
 .header {
-  height: 64px;
+  height: 60px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 32px;
-  padding: 0 3.2vw;
-  border-bottom: 1px solid #ffffff12;
+  padding: 0 40px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   font-family: var(--font-geist-mono);
   font-size: 12px;
   letter-spacing: .12em;
+  background: rgba(0, 0, 0, 0.4);
 }
 
-.header a { color: #cbd5e1; text-decoration: none; }
-.header > span { color: #67e8f9; }
+.header a { color: #cbd5e1; text-decoration: none; transition: color 0.2s; }
+.header a:hover { color: #22d3ee; }
+.header > span { color: #22d3ee; font-weight: bold; }
 .header .mode { margin-left: auto; color: #94a3b8; }
 
-.workspace {
-  flex: 1 0 auto;
-  display: grid;
-  grid-template-columns: minmax(560px, .9fr) minmax(0, 1.25fr);
-  gap: 24px;
-  padding: 24px 3.2vw 24px;
+.pipelineSection {
+  padding: 24px 40px 12px;
 }
 
-.left {
+.workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(350px, 1fr) minmax(500px, 1.4fr) minmax(320px, 1fr);
+  gap: 40px;
+  padding: 12px 40px 40px;
+}
+
+.leftColumn {
   display: flex;
   flex-direction: column;
+  gap: 24px;
   min-width: 0;
-  gap: 20px;
 }
 
-.eyebrow { font-family: var(--font-geist-mono); color: #67e8f9; font-size: 12px; letter-spacing: .18em; }
-.intro h1 { font-family: var(--font-space-grotesk); font-weight: 700; font-size: clamp(54px, 4.2vw, 80px); line-height: 1.08; letter-spacing: -.055em; margin: 8px 0 10px; }
-.subtitle { font-size: 17px; line-height: 1.45; font-weight: 500; max-width: 520px; }
-.description { font-size: 14px; line-height: 1.6; color: #94a3b8; margin-top: 8px; max-width: 510px; }
-.metadata { margin-top: 16px; font-family: var(--font-geist-mono); font-size: 10px; color: #67e8f9; letter-spacing: .06em; }
+.centerColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  position: relative;
+}
 
 .stage {
-  min-height: 520px;
-  height: calc(100vh - 180px);
-  max-height: 740px;
-  min-width: 0;
-  position: sticky;
-  top: 80px;
-  align-self: start;
+  height: 600px;
+  width: 100%;
+  position: relative;
+  background: radial-gradient(circle at center, rgba(34, 211, 238, 0.03) 0%, transparent 70%);
+  border-radius: 12px;
+  border: 1px solid rgba(34, 211, 238, 0.1);
+  overflow: hidden;
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.5);
 }
 
-.controls { width: 100%; }
-.controls :global(.parameter-grid) { column-gap: 36px; row-gap: 30px; }
-.controls :global(.parameter-heading) { padding-bottom: 6px; margin-bottom: 8px; }
-.controls :global(.parameter-heading) span:last-child { font-size: 12px; letter-spacing: .055em; white-space: nowrap; }
-.controls :global(.technical-slider) { padding: 0 0 5px; border: 0; }
-.controls :global(.technical-slider) > div { margin-bottom: 3px; gap: 5px; line-height: 18px; }
-.controls :global(.technical-slider) span { font-size: 13px; letter-spacing: 0; line-height: 18px; }
-.controls :global(.technical-slider) input { display: block; height: 4px; border-radius: 2px; appearance: none; outline: none; box-shadow: none; }
-.controls :global(.technical-slider) input::-webkit-slider-thumb { width: 16px; height: 16px; appearance: none; border: 2px solid #08101b; border-radius: 50%; background: var(--slider-thumb-color); box-shadow: none; }
-.controls :global(.technical-slider) input::-moz-range-thumb { width: 14px; height: 14px; border: 2px solid #08101b; border-radius: 50%; background: var(--slider-thumb-color); box-shadow: none; }
-.controls :global(.technical-slider) input:focus-visible { outline: 2px solid #e2e8f0; outline-offset: 5px; }
-
-.controls :global(.scenarios) { margin-top: 18px; padding-top: 10px; gap: 9px; }
-.controls :global(.scenarios) button { padding: 4px 0; border: 0; border-radius: 0; background: none; font-size: 10px; box-shadow: none; }
-.controls :global(.scenarios) button[aria-pressed="true"] { color: #a5f3fc; text-decoration: underline; text-underline-offset: 5px; }
-.controls :global(.scenarios) > div:last-child { gap: 4px 14px; }
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
 
 .footer {
   flex-shrink: 0;
-  width: 100%;
-  border-top: 1px solid #ffffff18;
-  padding: 20px 3.2vw 28px;
-  background: #030711;
-  display: flex;
-  align-items: center;
+  padding: 32px 40px 60px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(3, 7, 18, 0.95);
 }
 
-.footer :global(.decision-strip) { gap: 28px; }
-.footer :global(.decision-scores) { padding: 0 24px; }
-.footer :global(.decision-reason) { white-space: normal; overflow: visible; font-style: normal; font-size: 13px; line-height: 1.45; border: 0; padding: 0; margin-top: 5px; }
-.footer :global(.run-simulation) { padding: 14px 18px; border-radius: 0; box-shadow: none; }
-
-@media(min-height: 1000px) {
-  .workspace { padding-top: 44px; padding-bottom: 36px; }
-  .controls :global(.technical-slider) { padding-bottom: 15px; }
-  .controls :global(.parameter-grid) { row-gap: 38px; column-gap: 48px; }
+@media(max-width: 1536px) {
+  .workspace { grid-template-columns: 350px minmax(400px, 1fr) 300px; gap: 32px; }
 }
 
-@media(max-width: 1300px) {
-  .workspace { grid-template-columns: minmax(500px, .95fr) minmax(0, 1fr); gap: 16px; }
-  .footer :global(.decision-strip) { gap: 14px; }
+@media(max-width: 1280px) {
+  .workspace { grid-template-columns: 1fr; gap: 40px; }
+  .stage { height: 500px; }
 }
 
-@media(max-width: 1080px) {
-  .workspace { grid-template-columns: 1fr; gap: 32px; }
-  .stage { position: relative; top: auto; height: 500px; width: 100%; }
+@media(max-width: 768px) {
+  .header, .pipelineSection, .workspace, .footer { padding-left: 20px; padding-right: 20px; }
 }
-
-.controls :global(.scenarios) > div:first-child { display: none; }
-.controls :global(.scenarios) button { line-height: 16px; padding: 3px 0; }
