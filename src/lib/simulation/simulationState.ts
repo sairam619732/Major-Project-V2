@@ -42,10 +42,10 @@ export type SimulationApiStatus = "idle" | "running" | "success" | "error";
 export type TaskExecutionStage =
   | "idle"
   | "created"         // TASK CREATED
-  | "optimizing"      // DQN OPTIMIZING
+  | "optimizing"      // DQN DECIDING
   | "offloading"      // OFFLOADING TO [TIER]
-  | "executing"       // EXECUTING
-  | "ready"           // RESULT READY
+  | "executing"       // [TIER] EXECUTING
+  | "ready"           // RESULT RETURNED
   | "error";
 
 export interface UploadedImageInfo {
@@ -66,6 +66,26 @@ let currentExperimentConditions: ExperimentConditions = { ...DEFAULT_EXPERIMENT_
 let currentRealLocalTelemetry: LocalTelemetryResponse | null = null;
 let currentTelemetryLoading: boolean = false;
 let hasAttemptedTelemetryFetch: boolean = false;
+
+export interface SystemLogEvent {
+  id: string;
+  timestamp: number;
+  type: "INFO" | "WARNING" | "ERROR" | "EXECUTION";
+  message: string;
+  source: string;
+  details?: any;
+}
+
+let sessionLogs: SystemLogEvent[] = [];
+let executionHistory: SimulationExecutionResult[] = [];
+
+export function addSessionLog(type: SystemLogEvent["type"], message: string, source: string, details?: any) {
+  sessionLogs = [{
+    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    timestamp: Date.now(),
+    type, message, source, details
+  }, ...sessionLogs].slice(0, 200);
+}
 
 // Maps presets to experiment conditions for bi-directional synchronization
 const PRESET_CONDITION_MAP: Record<string, ExperimentConditions> = {
@@ -453,6 +473,14 @@ export const simulationStore = {
     return currentTelemetryLoading;
   },
 
+  getSessionLogs(): SystemLogEvent[] {
+    return sessionLogs;
+  },
+
+  getExecutionHistory(): SimulationExecutionResult[] {
+    return executionHistory;
+  },
+
   setExperimentCondition(key: keyof ExperimentConditions, val: WorkloadLevel | NetworkConditionLevel) {
     currentExperimentConditions = {
       ...currentExperimentConditions,
@@ -814,13 +842,8 @@ export const simulationStore = {
       const targetTier = result.decision.toLowerCase() as ExecutionTarget;
 
       // STEP D: Update DQN decision to trigger 3D task packet animation
-      if (result.decision === "EDGE") {
-        currentExecutionStage = "offloading";
-        currentStageLabel = "OFFLOADING TO EDGE";
-      } else {
-        currentExecutionStage = "offloading";
-        currentStageLabel = `OFFLOADING TO ${result.decision}`;
-      }
+      currentExecutionStage = "offloading";
+      currentStageLabel = `OFFLOADING TO ${result.decision.toUpperCase()}`;
 
       currentDecisionResult = {
         taskId: result.task_id,
@@ -864,17 +887,24 @@ export const simulationStore = {
       currentExecutionStage = "executing";
       if (result.decision === "EDGE") {
         currentStageLabel = "EDGE EXECUTING";
+      } else if (result.decision === "CLOUD") {
+        currentStageLabel = "CLOUD EXECUTING";
       } else {
         currentStageLabel = "LOCAL EXECUTING";
       }
       notify();
 
+      // Stage holds while remote execution returns
       await new Promise((resolve) => setTimeout(resolve, 600));
 
       // STEP G: Ready stage with real detection results
       currentExecutionDetails = result;
       currentExecutionStage = "ready";
       currentStageLabel = "RESULT RETURNED";
+      
+      executionHistory = [result, ...executionHistory].slice(0, 50);
+      addSessionLog("EXECUTION", `Task ${result.task_id} completed on ${result.decision} in ${result.execution_time_ms}ms`, "DQN_EXECUTOR", result);
+      
       notify();
 
       return result;
@@ -1095,6 +1125,18 @@ export function useSimulationState() {
     simulationStore.getTelemetryLoading
   );
 
+  const sessionLogs = useSyncExternalStore(
+    simulationStore.subscribe,
+    simulationStore.getSessionLogs,
+    simulationStore.getSessionLogs
+  );
+
+  const executionHistory = useSyncExternalStore(
+    simulationStore.subscribe,
+    simulationStore.getExecutionHistory,
+    simulationStore.getExecutionHistory
+  );
+
   useEffect(() => {
     if (!hasAttemptedTelemetryFetch) {
       simulationStore.fetchRealTelemetry();
@@ -1143,6 +1185,8 @@ export function useSimulationState() {
     experimentConditions,
     realLocalTelemetry,
     telemetryLoading,
+    sessionLogs,
+    executionHistory,
     updateTask,
     updateDevice,
     updateEdge,

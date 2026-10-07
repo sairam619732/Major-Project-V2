@@ -1040,7 +1040,7 @@ export function SimulationBottomResultStrip() {
                   : "text-slate-600"
               }
             >
-              DQN OPTIMIZING
+              DQN DECIDING
             </span>
             <span className="text-slate-600">→</span>
             <span
@@ -1052,7 +1052,7 @@ export function SimulationBottomResultStrip() {
                   : "text-slate-600"
               }
             >
-              {executionStage === "offloading" ? stageLabel : `OFFLOAD (${decision.selectedCandidate.displayName})`}
+              {`OFFLOADING TO ${selectedTarget.toUpperCase()}`}
             </span>
             <span className="text-slate-600">→</span>
             <span
@@ -1064,11 +1064,11 @@ export function SimulationBottomResultStrip() {
                   : "text-slate-600"
               }
             >
-              EXECUTING
+              {`${selectedTarget.toUpperCase()} EXECUTING`}
             </span>
             <span className="text-slate-600">→</span>
             <span className={executionStage === "ready" ? "text-emerald-400 font-bold" : "text-slate-600"}>
-              RESULT READY
+              RESULT RETURNED
             </span>
           </div>
 
@@ -1221,6 +1221,16 @@ export function SimulationBottomResultStrip() {
                 </span>
                 <div className="grid grid-cols-2 gap-2 font-mono">
                   <div className="p-2 rounded bg-white/[0.02] border border-white/[0.06] flex flex-col">
+                    <span className="text-[9px] uppercase text-slate-400">PAYLOAD SIZE</span>
+                    <span className="text-[13px] font-bold text-slate-100 tabular-nums">
+                      {executionDetails.input_size_mb != null
+                        ? `${executionDetails.input_size_mb} MB`
+                        : executionDetails.image_metadata?.size_bytes
+                        ? `${(executionDetails.image_metadata.size_bytes / 1024).toFixed(1)} KB`
+                        : `${state.task.taskSizeMb} MB`}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded bg-white/[0.02] border border-white/[0.06] flex flex-col">
                     <span className="text-[9px] uppercase text-slate-400">INFERENCE</span>
                     <span className="text-[13px] font-bold text-cyan-300 tabular-nums">
                       {executionDetails.processing_time_ms || executionDetails.execution_time_ms} ms
@@ -1248,6 +1258,12 @@ export function SimulationBottomResultStrip() {
                     <span className="text-[9px] uppercase text-slate-400">COST</span>
                     <span className="text-[13px] font-bold text-violet-300 tabular-nums">
                       {executionDetails.cost}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded bg-white/[0.02] border border-white/[0.06] flex flex-col">
+                    <span className="text-[9px] uppercase text-slate-400">DQN CONFIDENCE</span>
+                    <span className="text-[13px] font-bold text-emerald-300 tabular-nums">
+                      {(executionDetails.confidence * 100).toFixed(1)}%
                     </span>
                   </div>
                   <div className="p-2 rounded bg-white/[0.02] border border-white/[0.06] flex flex-col">
