@@ -14,8 +14,9 @@ interface ReadOnlyTelemetryProps {
   statusColor?: string;
 }
 
-function CircularMetric({ label, value, color, inverse = false }: { label: string; value: number; color: string; inverse?: boolean }) {
-  const displayValue = inverse ? 100 - value : value; // For CPU Available -> CPU Usage
+function CircularMetric({ label, value, color, inverse = false }: { label: string; value: number | null; color: string; inverse?: boolean }) {
+  // null = no real reading yet: empty ring and a dash instead of a made-up number.
+  const displayValue = value === null ? 0 : inverse ? 100 - value : value; // For CPU Available -> CPU Usage
   const circumference = 2 * Math.PI * 24;
   const strokeDashoffset = circumference - (displayValue / 100) * circumference;
 
@@ -27,7 +28,7 @@ function CircularMetric({ label, value, color, inverse = false }: { label: strin
           <circle cx="30" cy="30" r="24" stroke={color} strokeWidth="4" fill="transparent" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" className="transition-all duration-1000 ease-out" />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center font-bold text-[13px] text-slate-100 tabular-nums">
-          {displayValue.toFixed(1)}%
+          {value === null ? "—" : `${displayValue.toFixed(1)}%`}
         </div>
       </div>
       <span className="text-[11px] font-medium text-slate-400 mt-1">{label}</span>
@@ -43,6 +44,7 @@ const SOURCE_STYLES = {
   live: "text-emerald-300 border-emerald-500/30",
   sim: "text-violet-300 border-violet-500/30",
   assumed: "text-amber-300 border-amber-500/30",
+  offline: "text-rose-300 border-rose-500/30",
 } as const;
 type FeatureSource = keyof typeof SOURCE_STYLES;
 
@@ -61,18 +63,17 @@ export function SimulationTelemetryPanel() {
   // Poll the backend's psutil telemetry while this panel is on screen (shared poller).
   useEffect(() => simulationStore.startTelemetryPolling(), []);
 
-  const localWorkload = state.experimentConditions?.localWorkload ?? "LOW";
-  const isLocalReal = Boolean(realLocalTelemetry?.cpu_is_real) && localWorkload === "LOW";
+  // Local values are only ever real; until the backend answers they are shown as unavailable.
+  const isLocalReal = Boolean(realLocalTelemetry?.cpu_is_real);
   const batteryReal = isLocalReal && Boolean(realLocalTelemetry?.battery_is_real);
-  const localSource: FeatureSource = isLocalReal ? "live" : "sim";
+  const localSource: FeatureSource = isLocalReal ? "live" : "offline";
+  const localValue = (v: string) => (isLocalReal ? v : "—");
 
   const metricsBadge = isLocalReal
     ? { text: "LIVE · THIS DEVICE", cls: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10" }
-    : localWorkload !== "LOW"
-      ? { text: `SIMULATED · ${localWorkload} LOAD`, cls: "text-violet-300 border-violet-500/30 bg-violet-500/10" }
-      : telemetryLoading
-        ? { text: "CONNECTING…", cls: "text-slate-300 border-white/[0.12]" }
-        : { text: "BACKEND OFFLINE · FALLBACK", cls: "text-rose-300 border-rose-500/30 bg-rose-500/10" };
+    : telemetryLoading
+      ? { text: "CONNECTING…", cls: "text-slate-300 border-white/[0.12]" }
+      : { text: "BACKEND OFFLINE", cls: "text-rose-300 border-rose-500/30 bg-rose-500/10" };
 
   // DQN 17 Features Array
   const dqnFeatures: { name: string; value: string; key: number; source: FeatureSource }[] = [
@@ -81,10 +82,10 @@ export function SimulationTelemetryPanel() {
     { name: "Task Memory Demand", value: `${state.task.memoryDemandPct}%`, key: 2, source: "est" },
     { name: "Task Deadline", value: `${state.task.deadlineMs} ms`, key: 3, source: "set" },
     { name: "Task Priority", value: `LVL ${state.task.priority}`, key: 4, source: "set" },
-    { name: "Local CPU Avail", value: `${state.device.cpuAvailablePct}%`, key: 5, source: localSource },
-    { name: "Local Memory Avail", value: `${state.device.memoryAvailablePct}%`, key: 6, source: localSource },
-    { name: "Local Battery", value: `${state.device.batteryPct}%`, key: 7, source: batteryReal ? "live" : isLocalReal ? "assumed" : "sim" },
-    { name: "Local Base Latency", value: `${state.device.latencyMs} ms`, key: 8, source: isLocalReal ? "assumed" : "sim" },
+    { name: "Local CPU Avail", value: localValue(`${state.device.cpuAvailablePct}%`), key: 5, source: localSource },
+    { name: "Local Memory Avail", value: localValue(`${state.device.memoryAvailablePct}%`), key: 6, source: localSource },
+    { name: "Local Battery", value: localValue(`${state.device.batteryPct}%`), key: 7, source: batteryReal ? "live" : isLocalReal ? "assumed" : "offline" },
+    { name: "Local Base Latency", value: localValue(`${state.device.latencyMs} ms`), key: 8, source: isLocalReal ? "assumed" : "offline" },
     { name: "Edge CPU Load", value: `${state.edge.cpuLoadPct}%`, key: 9, source: "sim" },
     { name: "Edge Task Queue", value: `${state.edge.queueLength}`, key: 10, source: "sim" },
     { name: "Edge Network Lat", value: `${state.edge.latencyMs} ms`, key: 11, source: "sim" },
@@ -119,9 +120,9 @@ export function SimulationTelemetryPanel() {
         </div>
         
         <div className="flex items-center justify-between gap-2 px-2">
-           <CircularMetric label="CPU Usage" value={state.device.cpuAvailablePct} color="#ef4444" inverse />
-           <CircularMetric label="Memory" value={state.device.memoryAvailablePct} color="#f59e0b" inverse />
-           <CircularMetric label={isLocalReal && !batteryReal ? "Battery (none)" : "Battery"} value={state.device.batteryPct} color="#38bdf8" />
+           <CircularMetric label="CPU Usage" value={isLocalReal ? state.device.cpuAvailablePct : null} color="#ef4444" inverse />
+           <CircularMetric label="Memory" value={isLocalReal ? state.device.memoryAvailablePct : null} color="#f59e0b" inverse />
+           <CircularMetric label={isLocalReal && !batteryReal ? "Battery (none)" : "Battery"} value={isLocalReal ? state.device.batteryPct : null} color="#38bdf8" />
         </div>
 
         {isLocalReal && (

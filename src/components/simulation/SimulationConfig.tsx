@@ -102,17 +102,6 @@ export function SimulationConfig() {
 
       <div className="flex flex-col divide-y divide-white/[0.04] mb-5">
         <ConditionSelector<WorkloadLevel>
-          label="LOCAL WORKLOAD"
-          currentValue={experimentConditions.localWorkload}
-          options={[
-            { value: "LOW", label: "LOW (NOMINAL)" },
-            { value: "MEDIUM", label: "MEDIUM (BUSY)" },
-            { value: "HIGH", label: "HIGH (THROTTLED)" },
-          ]}
-          accentColor="#38bdf8"
-          onChange={(val) => setExperimentCondition("localWorkload", val)}
-        />
-        <ConditionSelector<WorkloadLevel>
           label="EDGE CONGESTION"
           currentValue={experimentConditions.edgeCongestion}
           options={[

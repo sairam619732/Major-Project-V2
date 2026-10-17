@@ -56,7 +56,6 @@ export interface UploadedImageInfo {
 }
 
 export const DEFAULT_EXPERIMENT_CONDITIONS: ExperimentConditions = {
-  localWorkload: "LOW",
   edgeCongestion: "LOW",
   cloudLoad: "LOW",
   networkCondition: "GOOD",
@@ -91,11 +90,10 @@ export function addSessionLog(type: SystemLogEvent["type"], message: string, sou
 
 // Maps presets to experiment conditions for bi-directional synchronization
 const PRESET_CONDITION_MAP: Record<string, ExperimentConditions> = {
-  balanced: { localWorkload: "LOW", edgeCongestion: "LOW", cloudLoad: "LOW", networkCondition: "GOOD" },
-  local_constrained: { localWorkload: "HIGH", edgeCongestion: "LOW", cloudLoad: "LOW", networkCondition: "GOOD" },
-  edge_congested: { localWorkload: "LOW", edgeCongestion: "HIGH", cloudLoad: "LOW", networkCondition: "GOOD" },
-  low_bandwidth: { localWorkload: "LOW", edgeCongestion: "LOW", cloudLoad: "MEDIUM", networkCondition: "POOR" },
-  cloud_heavy: { localWorkload: "HIGH", edgeCongestion: "HIGH", cloudLoad: "LOW", networkCondition: "GOOD" },
+  balanced: { edgeCongestion: "LOW", cloudLoad: "LOW", networkCondition: "GOOD" },
+  edge_congested: { edgeCongestion: "HIGH", cloudLoad: "LOW", networkCondition: "GOOD" },
+  low_bandwidth: { edgeCongestion: "LOW", cloudLoad: "MEDIUM", networkCondition: "POOR" },
+  cloud_heavy: { edgeCongestion: "HIGH", cloudLoad: "LOW", networkCondition: "GOOD" },
 };
 
 // Singleton In-Memory Simulation State Container
@@ -112,40 +110,26 @@ let currentSimulationState: SimulationState = {
 
 /**
  * Computes deterministic simulated environment state from experiment conditions.
- * Respects real host telemetry for Local Device when available and in LOW workload mode.
+ * The local device always comes from real host telemetry (see realDeviceState).
  */
+/**
+ * Local device state from this machine's real telemetry. A machine without a battery counts as 100%
+ * and the base latency is the backend's fixed dispatch overhead. Before the first reading arrives the
+ * current (placeholder) device is kept; the UI marks it as not live.
+ */
+function realDeviceState(): SimulationDeviceState {
+  const t = currentRealLocalTelemetry;
+  if (!t?.cpu_is_real) return currentSimulationState.device;
+  return {
+    ...currentSimulationState.device,
+    cpuAvailablePct: t.cpu_available,
+    memoryAvailablePct: t.memory_available,
+    batteryPct: t.battery_pct ?? 100,
+    latencyMs: t.base_latency_ms,
+  };
+}
+
 function applyConditionsToEnvironment(cond: ExperimentConditions) {
-  // 1. Device (Local)
-  let devCpu = 85;
-  let devMem = 70;
-  let devBat = 90;
-  let devLat = 1.2;
-
-  if (cond.localWorkload === "LOW") {
-    if (currentRealLocalTelemetry?.cpu_is_real) {
-      devCpu = currentRealLocalTelemetry.cpu_available;
-      devMem = currentRealLocalTelemetry.memory_available;
-      devBat = currentRealLocalTelemetry.battery_pct ?? 100;
-      devLat = currentRealLocalTelemetry.base_latency_ms;
-    } else {
-      devCpu = 82;
-      devMem = 74;
-      devBat = 88;
-      devLat = 1.2;
-    }
-  } else if (cond.localWorkload === "MEDIUM") {
-    devCpu = 46;
-    devMem = 50;
-    devBat = 65;
-    devLat = 2.4;
-  } else {
-    // HIGH
-    devCpu = 16;
-    devMem = 25;
-    devBat = 30;
-    devLat = 5.2;
-  }
-
   // 2. Edge (Simulated Fog Environment)
   let edgeCpu = 22;
   let edgeQueue = 1;
@@ -210,13 +194,7 @@ function applyConditionsToEnvironment(cond: ExperimentConditions) {
   currentSimulationState = {
     ...currentSimulationState,
     experimentConditions: { ...cond },
-    device: {
-      ...currentSimulationState.device,
-      cpuAvailablePct: devCpu,
-      memoryAvailablePct: devMem,
-      batteryPct: devBat,
-      latencyMs: devLat,
-    },
+    device: realDeviceState(),
     edge: {
       ...currentSimulationState.edge,
       cpuLoadPct: edgeCpu,
@@ -496,7 +474,6 @@ export const simulationStore = {
     // Check if matches an existing preset
     const matchingPreset = Object.entries(PRESET_CONDITION_MAP).find(
       ([, conditions]) =>
-        conditions.localWorkload === currentExperimentConditions.localWorkload &&
         conditions.edgeCongestion === currentExperimentConditions.edgeCongestion &&
         conditions.cloudLoad === currentExperimentConditions.cloudLoad &&
         conditions.networkCondition === currentExperimentConditions.networkCondition
@@ -541,10 +518,8 @@ export const simulationStore = {
     try {
       const data = await fetchLocalTelemetry();
       currentRealLocalTelemetry = data;
-      if (currentExperimentConditions.localWorkload === "LOW") {
-        applyConditionsToEnvironment(currentExperimentConditions);
-        evaluateAndUpdate();
-      }
+      currentSimulationState = { ...currentSimulationState, device: realDeviceState() };
+      evaluateAndUpdate();
     } catch (err) {
       console.warn("Could not fetch real local host telemetry:", err);
     } finally {
@@ -563,17 +538,6 @@ export const simulationStore = {
       ...currentSimulationState,
       task: { ...currentSimulationState.task, ...updates },
       activePresetId: null, // Custom user modification
-    };
-    currentApiStatus = "idle";
-    currentApiError = null;
-    evaluateAndUpdate();
-  },
-
-  updateDevice(updates: Partial<SimulationDeviceState>) {
-    currentSimulationState = {
-      ...currentSimulationState,
-      device: { ...currentSimulationState.device, ...updates },
-      activePresetId: null,
     };
     currentApiStatus = "idle";
     currentApiError = null;
@@ -607,7 +571,6 @@ export const simulationStore = {
     if (!preset) return;
 
     const matchedCond = PRESET_CONDITION_MAP[presetId] || {
-      localWorkload: "LOW",
       edgeCongestion: "LOW",
       cloudLoad: "LOW",
       networkCondition: "GOOD",
@@ -617,7 +580,7 @@ export const simulationStore = {
     currentSimulationState = {
       ...currentSimulationState,
       task: { ...DEFAULT_SIMULATION_TASK, ...preset.state.task },
-      device: { ...DEFAULT_SIMULATION_DEVICE, ...preset.state.device },
+      device: realDeviceState(),
       edge: { ...DEFAULT_SIMULATION_EDGE, ...preset.state.edge },
       cloud: { ...DEFAULT_SIMULATION_CLOUD, ...preset.state.cloud },
       experimentConditions: { ...currentExperimentConditions },
@@ -1162,7 +1125,6 @@ export function useSimulationState() {
   }, []);
 
   const updateTask = useCallback((u: Partial<SimulationTaskState>) => simulationStore.updateTask(u), []);
-  const updateDevice = useCallback((u: Partial<SimulationDeviceState>) => simulationStore.updateDevice(u), []);
   const updateEdge = useCallback((u: Partial<SimulationEdgeState>) => simulationStore.updateEdge(u), []);
   const updateCloud = useCallback((u: Partial<SimulationCloudState>) => simulationStore.updateCloud(u), []);
   const applyPreset = useCallback((id: string) => simulationStore.applyPreset(id), []);
@@ -1206,7 +1168,6 @@ export function useSimulationState() {
     sessionLogs,
     executionHistory,
     updateTask,
-    updateDevice,
     updateEdge,
     updateCloud,
     applyPreset,

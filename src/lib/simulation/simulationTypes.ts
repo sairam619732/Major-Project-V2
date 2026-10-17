@@ -62,8 +62,8 @@ export type WorkloadLevel = "LOW" | "MEDIUM" | "HIGH";
 export type NetworkConditionLevel = "GOOD" | "LIMITED" | "POOR";
 
 // Explicit Simulation Scenario Input Controls (Phase 13D)
+// Local device values are never simulated: they always come from this machine's real telemetry.
 export interface ExperimentConditions {
-  localWorkload: WorkloadLevel;
   edgeCongestion: WorkloadLevel;
   cloudLoad: WorkloadLevel;
   networkCondition: NetworkConditionLevel;
@@ -101,7 +101,6 @@ export interface ScenarioPreset {
   expectedWinner?: ExecutionTarget;
   state: {
     task: Partial<SimulationTaskState>;
-    device: Partial<SimulationDeviceState>;
     edge: Partial<SimulationEdgeState>;
     cloud: Partial<SimulationCloudState>;
   };

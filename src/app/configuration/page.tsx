@@ -23,7 +23,7 @@ export default function ConfigurationPage() {
              </div>
              <div className="flex justify-between font-mono text-[12px]">
                <span className="text-slate-400">Local Workload Mode</span>
-               <span className="text-slate-200">{state.experimentConditions?.localWorkload || "N/A"}</span>
+               <span className="text-slate-200">LIVE (this machine)</span>
              </div>
              <div className="flex justify-between font-mono text-[12px]">
                <span className="text-slate-400">Edge Congestion Mode</span>

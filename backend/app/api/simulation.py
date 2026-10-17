@@ -24,6 +24,46 @@ from app.ml.environment import compute_action_metrics
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
 
 
+# Fixed on-device dispatch overhead (not measured) used as the local base latency.
+LOCAL_BASE_LATENCY_MS = 1.2
+
+
+def read_local_telemetry() -> dict:
+    """Real CPU / memory / battery of this machine via psutil (battery is None without one)."""
+    try:
+        cpu_util = psutil.cpu_percent(interval=None)
+        mem = psutil.virtual_memory()
+        battery = psutil.sensors_battery()
+        return {
+            "ok": True,
+            "cpu_load": round(cpu_util, 1),
+            "cpu_available": round(max(0.0, min(100.0, 100.0 - cpu_util)), 1),
+            "memory_available": round(mem.available / mem.total * 100.0, 1),
+            "memory_total_gb": round(mem.total / (1024**3), 1),
+            "battery_pct": round(battery.percent, 1) if battery is not None else None,
+            "battery_plugged": bool(battery.power_plugged) if battery is not None else None,
+            "cpu_count": psutil.cpu_count(logical=True),
+        }
+    except Exception:
+        return {"ok": False}
+
+
+def real_local_state() -> LocalNodeState:
+    """Local node state for the DQN from real telemetry; a machine without a battery counts as 100%."""
+    t = read_local_telemetry()
+    if not t["ok"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not read local device telemetry (psutil).",
+        )
+    return LocalNodeState(
+        cpu_available=t["cpu_available"],
+        memory_available=t["memory_available"],
+        battery_level=t["battery_pct"] if t["battery_pct"] is not None else 100.0,
+        base_latency=LOCAL_BASE_LATENCY_MS,
+    )
+
+
 @router.get(
     "/telemetry/local",
     summary="Get Real Local Machine Telemetry",
@@ -31,33 +71,23 @@ router = APIRouter(prefix="/simulation", tags=["Simulation"])
 )
 async def get_real_local_telemetry():
     """Returns actual real-time telemetry from the local host system."""
-    try:
-        cpu_util = psutil.cpu_percent(interval=None)
-        cpu_available = round(max(0.0, min(100.0, 100.0 - cpu_util)), 1)
-        mem = psutil.virtual_memory()
-        mem_available = round(mem.available / mem.total * 100.0, 1)
-        mem_total_gb = round(mem.total / (1024**3), 1)
-
-        battery = psutil.sensors_battery()
-        if battery is not None:
-            battery_pct = round(battery.percent, 1)
-            battery_status = "CHARGING / AC" if battery.power_plugged else "ON BATTERY"
-            battery_is_real = True
-        else:
-            battery_pct = None
-            battery_status = "UNAVAILABLE (AC Mains / Desktop Host)"
-            battery_is_real = False
-
-        cpu_count = psutil.cpu_count(logical=True)
-    except Exception as e:
-        cpu_available = 70.0
-        cpu_util = 30.0
-        mem_available = 60.0
-        mem_total_gb = 16.0
-        battery_pct = None
-        battery_status = "UNAVAILABLE"
-        battery_is_real = False
-        cpu_count = 8
+    t = read_local_telemetry()
+    if not t["ok"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not read local device telemetry (psutil).",
+        )
+    battery_pct = t["battery_pct"]
+    battery_is_real = battery_pct is not None
+    if battery_is_real:
+        battery_status = "CHARGING / AC" if t["battery_plugged"] else "ON BATTERY"
+    else:
+        battery_status = "UNAVAILABLE (AC Mains / Desktop Host)"
+    cpu_available = t["cpu_available"]
+    cpu_util = t["cpu_load"]
+    mem_available = t["memory_available"]
+    mem_total_gb = t["memory_total_gb"]
+    cpu_count = t["cpu_count"]
 
     return {
         "status": "success",
@@ -74,7 +104,7 @@ async def get_real_local_telemetry():
         "battery_status": battery_status,
         "battery_is_real": battery_is_real,
         # Not measured: a fixed on-device dispatch overhead used as the DQN's local base latency.
-        "base_latency_ms": 1.2,
+        "base_latency_ms": LOCAL_BASE_LATENCY_MS,
         "base_latency_status": "ASSUMED (fixed on-device dispatch overhead)",
         "base_latency_is_real": False,
     }
@@ -134,10 +164,6 @@ async def execute_simulation_task(
     task_id: Optional[str] = Form("TASK_CV_001"),
     deadline_ms: Optional[float] = Form(None),
     priority: Optional[int] = Form(3),
-    device_cpu_available: Optional[float] = Form(70.0),
-    device_memory_available: Optional[float] = Form(60.0),
-    device_battery_level: Optional[float] = Form(85.0),
-    device_base_latency: Optional[float] = Form(1.2),
     edge_cpu_load: Optional[float] = Form(40.0),
     edge_task_queue: Optional[int] = Form(2),
     edge_network_latency: Optional[float] = Form(14.5),
@@ -213,10 +239,6 @@ async def execute_simulation_task(
     task_id = _resolve_form_val(task_id, "TASK_CV_001")
     deadline_ms = _resolve_form_val(deadline_ms, 60.0)
     priority = _resolve_form_val(priority, 3)
-    device_cpu_available = _resolve_form_val(device_cpu_available, 70.0)
-    device_memory_available = _resolve_form_val(device_memory_available, 60.0)
-    device_battery_level = _resolve_form_val(device_battery_level, 85.0)
-    device_base_latency = _resolve_form_val(device_base_latency, 1.2)
     edge_cpu_load = _resolve_form_val(edge_cpu_load, 40.0)
     edge_task_queue = _resolve_form_val(edge_task_queue, 2)
     edge_network_latency = _resolve_form_val(edge_network_latency, 14.5)
@@ -231,19 +253,7 @@ async def execute_simulation_task(
     if telemetry_json:
         try:
             parsed = json.loads(telemetry_json)
-            if "device" in parsed:
-                dev = parsed["device"]
-                device_cpu_available = dev.get("cpuAvailablePct", device_cpu_available)
-                device_memory_available = dev.get("memoryAvailablePct", device_memory_available)
-                device_battery_level = dev.get("batteryPct", device_battery_level)
-                device_base_latency = dev.get("latencyMs", device_base_latency)
-            elif "local" in parsed:
-                loc = parsed["local"]
-                device_cpu_available = loc.get("cpu_available", device_cpu_available)
-                device_memory_available = loc.get("memory_available", device_memory_available)
-                device_battery_level = loc.get("battery_level", device_battery_level)
-                device_base_latency = loc.get("base_latency", device_base_latency)
-
+            # Any "device"/"local" block is ignored: the local state is read from this machine below.
             if "edge" in parsed:
                 ed = parsed["edge"]
                 edge_cpu_load = ed.get("cpuLoadPct", ed.get("cpu_load", edge_cpu_load))
@@ -273,12 +283,7 @@ async def execute_simulation_task(
     actual_task_id = str(task_id) if task_id else f"TASK_CV_{int(time.time() % 10000):04d}"
 
     # Build node states
-    local_state = LocalNodeState(
-        cpu_available=max(0.0, min(100.0, float(device_cpu_available or 70.0))),
-        memory_available=max(0.0, min(100.0, float(device_memory_available or 60.0))),
-        battery_level=max(0.0, min(100.0, float(device_battery_level or 85.0))),
-        base_latency=max(0.1, float(device_base_latency or 1.2)),
-    )
+    local_state = real_local_state()
     edge_state = EdgeNodeState(
         cpu_load=max(0.0, min(100.0, float(edge_cpu_load or 40.0))),
         task_queue=max(0, int(edge_task_queue or 2)),

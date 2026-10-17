@@ -325,10 +325,7 @@ export async function executeTaskOffloading(
   formData.append("task_id", state.task.id || "TASK_CV_001");
   formData.append("deadline_ms", state.task.deadlineMs.toString());
   formData.append("priority", state.task.priority.toString());
-  formData.append("device_cpu_available", state.device.cpuAvailablePct.toString());
-  formData.append("device_memory_available", state.device.memoryAvailablePct.toString());
-  formData.append("device_battery_level", state.device.batteryPct.toString());
-  formData.append("device_base_latency", state.device.latencyMs.toString());
+  // Local device values are read by the backend itself (real telemetry), so they are not sent.
   formData.append("edge_cpu_load", state.edge.cpuLoadPct.toString());
   formData.append("edge_task_queue", state.edge.queueLength.toString());
   formData.append("edge_network_latency", state.edge.latencyMs.toString());

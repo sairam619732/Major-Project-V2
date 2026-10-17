@@ -20,6 +20,7 @@ export const DEFAULT_SIMULATION_TASK: SimulationTaskState = {
   priority: 3,
 };
 
+// Placeholder until the first real telemetry reading arrives (local values are never simulated).
 export const DEFAULT_SIMULATION_DEVICE: SimulationDeviceState = {
   cpuAvailablePct: 38,
   memoryAvailablePct: 48,
@@ -57,12 +58,6 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
         deadlineMs: 45,
         priority: 3,
       },
-      device: {
-        cpuAvailablePct: 38,
-        memoryAvailablePct: 48,
-        batteryPct: 72,
-        latencyMs: 0.8,
-      },
       edge: {
         cpuLoadPct: 41,
         queueLength: 2,
@@ -80,41 +75,6 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
     },
   },
   {
-    id: "local_constrained",
-    name: "LOCAL CONSTRAINED",
-    badge: "LOW POWER",
-    description: "Local mobile device suffers severe thermal throttling and low battery reserves (22%).",
-    state: {
-      task: {
-        taskSizeMb: 20,
-        cpuDemandPct: 82,
-        memoryDemandPct: 68,
-        deadlineMs: 55,
-        priority: 4,
-      },
-      device: {
-        cpuAvailablePct: 12,
-        memoryAvailablePct: 18,
-        batteryPct: 22,
-        latencyMs: 2.2,
-      },
-      edge: {
-        cpuLoadPct: 36,
-        queueLength: 1,
-        latencyMs: 3.4,
-        bandwidthGbps: 14,
-        memoryAvailablePct: 72,
-      },
-      cloud: {
-        cpuLoadPct: 62,
-        queueLength: 14,
-        latencyMs: 40,
-        bandwidthGbps: 25,
-        memoryAvailablePct: 80,
-      },
-    },
-  },
-  {
     id: "edge_congested",
     name: "EDGE CONGESTED",
     badge: "QUEUE SPIKE",
@@ -126,12 +86,6 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
         memoryDemandPct: 55,
         deadlineMs: 85,
         priority: 3,
-      },
-      device: {
-        cpuAvailablePct: 28,
-        memoryAvailablePct: 40,
-        batteryPct: 65,
-        latencyMs: 1.0,
       },
       edge: {
         cpuLoadPct: 94,
@@ -162,12 +116,6 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
         deadlineMs: 125,
         priority: 2,
       },
-      device: {
-        cpuAvailablePct: 64,
-        memoryAvailablePct: 68,
-        batteryPct: 88,
-        latencyMs: 0.5,
-      },
       edge: {
         cpuLoadPct: 45,
         queueLength: 4,
@@ -197,12 +145,6 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
         deadlineMs: 145,
         priority: 5,
       },
-      device: {
-        cpuAvailablePct: 24,
-        memoryAvailablePct: 30,
-        batteryPct: 54,
-        latencyMs: 1.2,
-      },
       edge: {
         cpuLoadPct: 82,
         queueLength: 15,
@@ -231,12 +173,6 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
         memoryDemandPct: 32,
         deadlineMs: 22,
         priority: 5,
-      },
-      device: {
-        cpuAvailablePct: 84,
-        memoryAvailablePct: 80,
-        batteryPct: 92,
-        latencyMs: 0.4,
       },
       edge: {
         cpuLoadPct: 26,

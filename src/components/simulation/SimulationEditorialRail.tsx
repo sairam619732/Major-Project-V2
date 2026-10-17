@@ -226,7 +226,7 @@ export function SimulationCompactControls() {
     }
   };
 
-  const isLocalReal = realLocalTelemetry?.cpu_is_real && experimentConditions.localWorkload === "LOW";
+  const isLocalReal = Boolean(realLocalTelemetry?.cpu_is_real);
 
   return (
     <div className="flex flex-col w-full text-slate-200 select-none gap-7 sm:gap-8 pb-4 sm:pb-5">
@@ -708,17 +708,6 @@ export function SimulationCompactControls() {
 
         {/* 4 Experiment Condition Controls */}
         <div className="flex flex-col divide-y divide-white/[0.04]">
-          <ConditionSelector<WorkloadLevel>
-            label="LOCAL WORKLOAD"
-            currentValue={experimentConditions.localWorkload}
-            options={[
-              { value: "LOW", label: "LOW (NOMINAL)" },
-              { value: "MEDIUM", label: "MEDIUM (BUSY)" },
-              { value: "HIGH", label: "HIGH (THROTTLED)" },
-            ]}
-            accentColor="#fbbf24"
-            onChange={(val) => setExperimentCondition("localWorkload", val)}
-          />
 
           <ConditionSelector<WorkloadLevel>
             label="EDGE CONGESTION"
@@ -837,7 +826,7 @@ export function SimulationCompactControls() {
                 unit="%"
                 accentColor="#fbbf24"
                 pct={state.device.cpuAvailablePct}
-                statusBadge={isLocalReal ? "REAL" : "SIMULATED"}
+                statusBadge={isLocalReal ? "REAL" : "OFFLINE"}
                 statusColor={isLocalReal ? "text-emerald-300 border-emerald-500/30" : "text-amber-300 border-amber-500/30"}
                 subtitle={isLocalReal ? `Host load: ${realLocalTelemetry?.cpu_load}% (${realLocalTelemetry?.cpu_count} logical cores)` : undefined}
               />
@@ -847,7 +836,7 @@ export function SimulationCompactControls() {
                 unit="%"
                 accentColor="#fbbf24"
                 pct={state.device.memoryAvailablePct}
-                statusBadge={isLocalReal ? "REAL" : "SIMULATED"}
+                statusBadge={isLocalReal ? "REAL" : "OFFLINE"}
                 statusColor={isLocalReal ? "text-emerald-300 border-emerald-500/30" : "text-amber-300 border-amber-500/30"}
                 subtitle={isLocalReal ? `RAM total: ${realLocalTelemetry?.memory_total_gb} GB` : undefined}
               />
@@ -857,9 +846,9 @@ export function SimulationCompactControls() {
                 unit={isLocalReal && realLocalTelemetry?.battery_pct == null ? "" : "%"}
                 accentColor="#fbbf24"
                 pct={state.device.batteryPct}
-                statusBadge={!isLocalReal ? "SIMULATED" : realLocalTelemetry?.battery_is_real ? "REAL" : "100% ASSUMED"}
+                statusBadge={!isLocalReal ? "OFFLINE" : realLocalTelemetry?.battery_is_real ? "REAL" : "100% ASSUMED"}
                 statusColor={isLocalReal && realLocalTelemetry?.battery_is_real ? "text-emerald-300 border-emerald-500/30" : "text-slate-400 border-white/[0.08]"}
-                subtitle={!isLocalReal ? "Set by the local workload condition" : realLocalTelemetry?.battery_is_real ? realLocalTelemetry.battery_status : "No battery detected (desktop / AC mains)"}
+                subtitle={!isLocalReal ? "Waiting for backend telemetry" : realLocalTelemetry?.battery_is_real ? realLocalTelemetry.battery_status : "No battery detected (desktop / AC mains)"}
               />
               <ReadOnlyTelemetryIndicator
                 label="Base Latency"
