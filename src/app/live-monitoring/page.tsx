@@ -20,7 +20,7 @@ export default function LiveMonitoringPage() {
        <div className="flex flex-col gap-2 mb-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold font-sans tracking-tight">Live Monitoring</h1>
+              <h1 className="text-3xl font-bold font-sans tracking-tight holo-title">Live Monitoring</h1>
               <p className="text-[14px] text-slate-400">Real-time Node Telemetry & Environment State</p>
             </div>
             {telemetryLoading && (
@@ -31,7 +31,7 @@ export default function LiveMonitoringPage() {
 
        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
          {/* LOCAL NODE */}
-         <div className="flex flex-col border border-white/[0.05] bg-[#060b14] rounded-xl overflow-hidden shadow-xl">
+         <div className="flex flex-col border holo-panel rounded-xl overflow-hidden">
            <div className="p-4 border-b border-white/[0.05] bg-black/40 flex justify-between items-center">
              <h2 className="font-mono text-[13px] uppercase text-slate-300 font-bold tracking-widest">Local Device</h2>
              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -79,7 +79,7 @@ export default function LiveMonitoringPage() {
          </div>
 
          {/* EDGE NODE */}
-         <div className="flex flex-col border border-emerald-900/30 bg-[#060b14] rounded-xl overflow-hidden shadow-xl">
+         <div className="flex flex-col border border-emerald-900/30 holo-panel rounded-xl overflow-hidden">
            <div className="p-4 border-b border-white/[0.05] bg-black/40 flex justify-between items-center">
              <h2 className="font-mono text-[13px] uppercase text-emerald-400 font-bold tracking-widest">Edge Server</h2>
              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
@@ -128,7 +128,7 @@ export default function LiveMonitoringPage() {
          </div>
 
          {/* CLOUD NODE */}
-         <div className="flex flex-col border border-purple-900/30 bg-[#060b14] rounded-xl overflow-hidden shadow-xl">
+         <div className="flex flex-col border border-purple-900/30 holo-panel rounded-xl overflow-hidden">
            <div className="p-4 border-b border-white/[0.05] bg-black/40 flex justify-between items-center">
              <h2 className="font-mono text-[13px] uppercase text-purple-400 font-bold tracking-widest">Cloud Cluster</h2>
              <span className="text-[10px] uppercase font-bold text-purple-600">Off-Premise</span>

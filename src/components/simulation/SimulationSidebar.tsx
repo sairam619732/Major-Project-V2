@@ -15,14 +15,14 @@ export function SimulationSidebar({ open = false, onClose }: { open?: boolean; o
       className={`lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity ${open ? "opacity-100" : "opacity-0 pointer-events-none"}`}
     />
     <aside
-      className={`w-[260px] h-screen bg-[#060b14] border-r border-white/[0.05] flex flex-col flex-shrink-0 fixed inset-y-0 left-0 z-50 transition-transform duration-200 lg:static lg:translate-x-0 ${
+      className={`w-[260px] h-screen holo-chrome border-r flex flex-col flex-shrink-0 fixed inset-y-0 left-0 z-50 transition-transform duration-200 lg:static lg:translate-x-0 ${
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
       {/* Logo Area */}
-      <div className="h-[70px] flex items-center justify-between px-6 border-b border-white/[0.05]">
+      <div className="h-[70px] flex items-center justify-between px-6 border-b border-cyan-400/10">
         <Link href="/" className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-blue-600/20 border border-blue-500/50 flex items-center justify-center text-blue-400">
+          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-cyan-500/30 to-violet-500/30 border border-cyan-300/50 flex items-center justify-center text-cyan-200 shadow-[0_0_16px_rgba(34,211,238,0.35)]">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
@@ -63,7 +63,7 @@ export function SimulationSidebar({ open = false, onClose }: { open?: boolean; o
       </nav>
 
       {/* Footer Status */}
-      <div className="p-4 m-4 rounded-lg bg-[#0a1120] border border-emerald-500/20 flex flex-col gap-2">
+      <div className="p-4 m-4 rounded-lg holo-panel border-emerald-500/25 flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
           <span className="text-emerald-400 font-bold text-[12px]">DQN Agent Ready</span>
@@ -80,7 +80,7 @@ export function SimulationSidebar({ open = false, onClose }: { open?: boolean; o
 
 function NavItem({ label, icon, href, active }: { label: string; icon: string; href: string; active?: boolean }) {
   return (
-    <Link href={href} className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors ${active ? 'bg-blue-600/10 text-blue-400' : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]'}`}>
+    <Link href={href} className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors ${active ? 'holo-nav-active' : 'text-slate-400 hover:text-cyan-100 hover:bg-cyan-400/[0.05]'}`}>
       {/* Abstract icon based on prop */}
       <div className="w-4 h-4 opacity-70">
          {icon === 'home' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>}

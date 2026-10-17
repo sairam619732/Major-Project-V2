@@ -19,7 +19,7 @@ export default function ModelPerformancePage() {
   return (
     <DashboardLayout>
        <div className="flex flex-col gap-2 mb-4">
-          <h1 className="text-3xl font-bold font-sans tracking-tight">Model Performance</h1>
+          <h1 className="text-3xl font-bold font-sans tracking-tight holo-title">Model Performance</h1>
           <p className="text-[14px] text-slate-400">DQN Offloading Agent Benchmarks & Training State</p>
        </div>
        
@@ -30,21 +30,21 @@ export default function ModelPerformancePage() {
        ) : data ? (
          <div className="flex flex-col gap-6">
            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-             <div className="p-4 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-1 shadow-md">
+             <div className="p-4 holo-panel border rounded-xl flex flex-col gap-1">
                <span className="text-[11px] font-mono uppercase text-slate-500">Model Source</span>
                <span className="text-xl font-bold text-slate-200">{data.dataSource === "live_api" ? "LIVE API" : "STATIC SNAPSHOT"}</span>
              </div>
-             <div className="p-4 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-1 shadow-md">
+             <div className="p-4 holo-panel border rounded-xl flex flex-col gap-1">
                <span className="text-[11px] font-mono uppercase text-slate-500">Avg Reward (DQN)</span>
                <span className="text-2xl font-bold text-cyan-400">{data.policies?.["dqn"]?.metrics?.reward?.mean?.toFixed(4) || "N/A"}</span>
              </div>
-             <div className="p-4 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-1 shadow-md">
+             <div className="p-4 holo-panel border rounded-xl flex flex-col gap-1">
                <span className="text-[11px] font-mono uppercase text-slate-500">Feasibility Rate</span>
                <span className="text-2xl font-bold text-blue-400">{data.policies?.["dqn"]?.success_rate_pct?.toFixed(1) || "0"}%</span>
              </div>
            </div>
 
-           <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl shadow-xl flex flex-col gap-4">
+           <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
              <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase">Action Distribution (DQN)</h2>
              <div className="grid grid-cols-1 gap-8">
                <div className="border border-white/[0.05] p-4 rounded bg-black/20">
@@ -58,7 +58,7 @@ export default function ModelPerformancePage() {
              </div>
            </div>
            
-           <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl shadow-xl flex flex-col gap-4">
+           <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
              <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase">Baseline Comparisons</h2>
              <table className="w-full text-left border-collapse border border-white/[0.05]">
                  <thead>

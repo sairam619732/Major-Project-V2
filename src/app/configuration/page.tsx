@@ -8,13 +8,13 @@ export default function ConfigurationPage() {
   return (
     <DashboardLayout>
        <div className="flex flex-col gap-2 mb-6">
-          <h1 className="text-3xl font-bold font-sans tracking-tight">Configuration</h1>
+          <h1 className="text-3xl font-bold font-sans tracking-tight holo-title">Configuration</h1>
           <p className="text-[14px] text-slate-400">Current simulation and agent parameters</p>
        </div>
        
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
          {/* Environment Config */}
-         <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-4 shadow-xl">
+         <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
            <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase border-b border-white/[0.05] pb-2">Environment State</h2>
            <div className="flex flex-col gap-3">
              <div className="flex justify-between font-mono text-[12px]">
@@ -41,7 +41,7 @@ export default function ConfigurationPage() {
          </div>
 
          {/* Workload Config */}
-         <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-4 shadow-xl">
+         <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
            <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase border-b border-white/[0.05] pb-2">Task Configuration</h2>
            <div className="flex flex-col gap-3">
              <div className="flex justify-between font-mono text-[12px]">
@@ -72,7 +72,7 @@ export default function ConfigurationPage() {
          </div>
 
          {/* Model Config */}
-         <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-4 shadow-xl lg:col-span-2">
+         <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4 lg:col-span-2">
            <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase border-b border-white/[0.05] pb-2">DQN Agent & Reward Parameters</h2>
            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="flex flex-col gap-2">

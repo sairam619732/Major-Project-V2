@@ -12,7 +12,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const sidebarOpen = openFor === pathname;
 
   return (
-    <div className="flex h-screen bg-[#020617] text-slate-200 overflow-hidden font-sans">
+    <div className="flex h-screen holo-backdrop text-slate-200 overflow-hidden font-sans">
       <SimulationSidebar open={sidebarOpen} onClose={() => setOpenFor(null)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <SimulationTopHeader onMenuClick={() => setOpenFor(pathname)} />

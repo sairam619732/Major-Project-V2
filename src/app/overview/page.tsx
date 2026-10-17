@@ -8,12 +8,12 @@ export default function OverviewPage() {
   return (
     <DashboardLayout>
        <div className="flex flex-col gap-2 mb-4">
-          <h1 className="text-3xl font-bold font-sans tracking-tight">Overview</h1>
+          <h1 className="text-3xl font-bold font-sans tracking-tight holo-title">Overview</h1>
           <p className="text-[14px] text-slate-400">High-level system status and recent activity</p>
        </div>
        
        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-2 shadow-[0_0_20px_rgba(0,0,0,0.2)] relative overflow-hidden">
+          <div className="p-6 holo-panel border rounded-xl flex flex-col gap-2 relative overflow-hidden">
             <span className="text-slate-400 font-mono text-[11px] uppercase tracking-wider">System Status</span>
             {apiStatus === "error" ? (
               <span className="text-2xl font-bold text-rose-500">Error</span>
@@ -25,7 +25,7 @@ export default function OverviewPage() {
             </div>
           </div>
           
-          <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-2 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+          <div className="p-6 holo-panel border rounded-xl flex flex-col gap-2">
             <span className="text-slate-400 font-mono text-[11px] uppercase tracking-wider">DQN Agent</span>
             {apiStatus === "running" ? (
               <span className="text-2xl font-bold text-blue-400 animate-pulse">Evaluating...</span>
@@ -35,7 +35,7 @@ export default function OverviewPage() {
             <span className="text-[11px] text-slate-500 font-mono mt-1">Current Target: {decision?.selectedTarget.toUpperCase() || "N/A"}</span>
           </div>
 
-          <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-2 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+          <div className="p-6 holo-panel border rounded-xl flex flex-col gap-2">
             <span className="text-slate-400 font-mono text-[11px] uppercase tracking-wider">Network Tier States</span>
             <div className="flex flex-col gap-1 mt-1">
               <div className="flex justify-between items-center text-[12px] font-mono">
@@ -54,7 +54,7 @@ export default function OverviewPage() {
           </div>
        </div>
 
-       <div className="mt-4 p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-4 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+       <div className="mt-4 p-6 holo-panel border rounded-xl flex flex-col gap-4">
          <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase">Recent Executions</h2>
          {executionHistory.length === 0 ? (
            <div className="min-h-[150px] flex items-center justify-center border border-white/[0.05] bg-black/40 rounded border-dashed">

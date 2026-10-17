@@ -8,6 +8,7 @@ import { Text, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { simulationStore } from "@/lib/simulation/simulationState";
 import { SparseDeepSpaceStars } from "@/components/3d/SparseDeepSpaceStars";
+import { AdaptiveQuality, canvasQuality, useInView } from "@/lib/three/renderQuality";
 import { SimulationEdgeTelemetryOverlay, SimulationCloudTelemetryOverlay } from "@/components/simulation/SimulationTelemetryOverlays";
 
 type Target = "local" | "edge" | "cloud";
@@ -333,11 +334,16 @@ export function SimulationSceneCanvas() {
     return () => observer.disconnect();
   }, []);
   const { ppu, spread, showCards } = sceneLayout(size);
+  // Stop rendering while the panel is scrolled out of view.
+  const inView = useInView(container);
+  const quality = canvasQuality();
   // Screen position of the model row, matching FitCamera's orthographic projection.
   const cardTop = size.height / 2 - (MODELS.edge.position[1] - VIEW_CENTER_Y) * ppu;
 
   return <div ref={container} style={{ width: "100%", height: "100%", position: "relative" }}>
-    <Canvas orthographic camera={{ position: [0, VIEW_CENTER_Y, 12], near: .1, far: 100 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true }}>
+    <Canvas orthographic camera={{ position: [0, VIEW_CENTER_Y, 12], near: .1, far: 100 }} frameloop={inView ? "always" : "never"}
+      dpr={quality.dpr} gl={{ antialias: quality.antialias, alpha: true, powerPreference: "high-performance" }}>
+      <AdaptiveQuality />
       <FitCamera />
       <ambientLight intensity={1.1} />
       <directionalLight position={[2, 4, 6]} intensity={3} color="#e2e8f0" />
