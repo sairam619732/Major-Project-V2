@@ -5,12 +5,46 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { scrollState } from "@/store/scrollStore";
 
+// Decision constellation extent around the camera target (26, 0.5): edge rack + halo on the left,
+// cloud hall on the right, tablet on top (positions in DecisionVisualization).
+const DECISION_MIN_X = -1.7;
+const DECISION_MAX_X = 1.6;
+const DECISION_HEIGHT = 3.6;
+const BAND_GAP_PX = 24;
+
+/**
+ * Camera distance and horizontal lens shift that fit the Decision constellation into the free band
+ * between the editorial column (left 7vw, 32vw ≤ 520px) and the candidate cards (right 6vw,
+ * 23vw ≤ 340px) laid out in StorySections, instead of centering it on screen behind both.
+ */
+function decisionFraming(width: number, height: number, fovDeg: number, baseDistance: number) {
+  const textRight = width * 0.07 + Math.min(width * 0.32, 520) + BAND_GAP_PX;
+  const cardsLeft = width - width * 0.06 - Math.min(width * 0.23, 340) - BAND_GAP_PX;
+  const bandWidth = Math.max(cardsLeft - textRight, width * 0.3);
+  const bandCenter = (textRight + cardsLeft) / 2;
+
+  // Pixels per world unit on the z = 0 plane: as close as the original framing, but no larger
+  // than what fits the band's width and ~80% of the height.
+  const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2);
+  const pxPerUnit = Math.min(
+    height / (2 * tanHalfFov * baseDistance),
+    bandWidth / (DECISION_MAX_X - DECISION_MIN_X),
+    (height * 0.8) / DECISION_HEIGHT
+  );
+  const distance = height / (2 * tanHalfFov * pxPerUnit);
+  const shiftPx = bandCenter - width / 2 - ((DECISION_MIN_X + DECISION_MAX_X) / 2) * pxPerUnit;
+  return { distance, shiftPx };
+}
+
 export function ScrollCameraController() {
   const { viewport } = useThree();
+  const size = useThree((s) => s.size);
   const lookAtTarget = useRef(new THREE.Vector3(0, 0, 0));
+  const appliedShift = useRef(0);
 
   const isDesktop = viewport.width > 6.8;
   const deviceY = isDesktop ? 0 : -Math.min(1.8, viewport.height * 0.22);
+  const decisionFit = decisionFraming(size.width, size.height, 36, isDesktop ? 5.75 : 7.5);
 
   // Smooth Hermite interpolation helper
   const smoothstep = (min: number, max: number, value: number) => {
@@ -27,6 +61,8 @@ export function ScrollCameraController() {
     // Phase 10: Single master visual timeline with smooth extension into Decision section
     const fullP = Math.max(scrollState.visualProgress, 0);
     const p = Math.min(fullP, 1);
+    // Eases the Decision framing (dolly + lens shift) in as the camera travels there.
+    const tDecision = smoothstep(1.00, 1.20, fullP);
 
     if (isDesktop) {
       if (p <= 0.18) {
@@ -122,11 +158,11 @@ export function ScrollCameraController() {
         );
       } else if (fullP <= 1.40) {
         // 8. DECISION OFFLOADING SECTION (Phase 10.2.2): Intimate framing for balanced, readable candidate assets
-        const tDec = smoothstep(1.00, 1.20, fullP);
+        const tDec = tDecision;
         targetPos.current.set(
           THREE.MathUtils.lerp(13.45, 26.00, tDec),
           THREE.MathUtils.lerp(2.20, 0.50, tDec),
-          THREE.MathUtils.lerp(4.65, 5.75, tDec)
+          THREE.MathUtils.lerp(4.65, decisionFit.distance, tDec)
         );
         targetLook.current.set(
           THREE.MathUtils.lerp(15.35, 26.00, tDec),
@@ -140,7 +176,7 @@ export function ScrollCameraController() {
         targetPos.current.set(
           THREE.MathUtils.lerp(26.00, 26.85, tSim),
           THREE.MathUtils.lerp(0.50, 0.40, tSim),
-          THREE.MathUtils.lerp(5.75, 6.25, tSim)
+          THREE.MathUtils.lerp(decisionFit.distance, decisionFit.distance + 0.5, tSim)
         );
         targetLook.current.set(
           THREE.MathUtils.lerp(26.00, 26.35, tSim),
@@ -223,11 +259,11 @@ export function ScrollCameraController() {
           THREE.MathUtils.lerp(-0.80, -1.50, t)
         );
       } else {
-        const tDec = smoothstep(1.00, 1.20, fullP);
+        const tDec = tDecision;
         targetPos.current.set(
           THREE.MathUtils.lerp(13.80, 26.00, tDec),
           THREE.MathUtils.lerp(0.90, 0.50, tDec),
-          THREE.MathUtils.lerp(5.20, 7.50, tDec)
+          THREE.MathUtils.lerp(5.20, decisionFit.distance, tDec)
         );
         targetLook.current.set(
           THREE.MathUtils.lerp(15.20, 26.00, tDec),
@@ -241,6 +277,16 @@ export function ScrollCameraController() {
     state.camera.position.copy(targetPos.current);
     lookAtTarget.current.copy(targetLook.current);
     state.camera.lookAt(lookAtTarget.current);
+
+    // Lens shift (not a camera pan) so the constellation moves into the band without changing its
+    // perspective; zero everywhere before the Decision section.
+    const shift = Math.round(decisionFit.shiftPx * tDecision);
+    if (shift !== appliedShift.current) {
+      appliedShift.current = shift;
+      const camera = state.camera as THREE.PerspectiveCamera;
+      if (shift === 0) camera.clearViewOffset();
+      else camera.setViewOffset(size.width, size.height, -shift, 0, size.width, size.height);
+    }
   });
 
   return null;

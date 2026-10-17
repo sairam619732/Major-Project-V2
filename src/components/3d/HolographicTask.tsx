@@ -364,6 +364,7 @@ export function HolographicTask() {
 
   // Phase 7.6: Dedicated position vector
   const curPos = useRef(new THREE.Vector3());
+  const screenPos = useRef(new THREE.Vector3());
 
   useFrame((state, delta) => {
     // Phase 10: Single master visual timeline with smooth extension into Decision section
@@ -565,6 +566,12 @@ export function HolographicTask() {
     if (groupRef.current) {
       groupRef.current.position.copy(curPos.current);
     }
+
+    // Report the core's on-screen position (lens shift included) so the /simulation transition
+    // overlay glows and bursts exactly on it, following it as it flies toward the camera.
+    // The canvas fills the viewport, so NDC maps straight to viewport fractions.
+    screenPos.current.copy(curPos.current).project(state.camera);
+    transitionStore.setOrigin((screenPos.current.x + 1) / 2, (1 - screenPos.current.y) / 2);
 
     // Continuous status mapping across all 3 computing tiers
     if (p < 0.30) {

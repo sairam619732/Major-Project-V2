@@ -14,6 +14,8 @@ type TransitionListener = (
 let isTransitioning = false;
 let transitionProgress = 0; // 0.0 -> 1.0
 let transitionMode: TransitionMode = "decision_exit";
+// Where the signal leaves from, as a fraction of the viewport (the TASK_001 core on screen).
+const origin = { x: 0.5, y: 0.5 };
 const listeners = new Set<TransitionListener>();
 
 function notify() {
@@ -39,6 +41,17 @@ export const transitionStore = {
 
   getMode(): TransitionMode {
     return transitionMode;
+  },
+
+  /** Viewport-fraction position the overlay's glow and burst start from. */
+  getOrigin(): Readonly<{ x: number; y: number }> {
+    return origin;
+  },
+
+  /** Kept in sync by the 3D scene so the overlay starts exactly on the task core. */
+  setOrigin(x: number, y: number): void {
+    origin.x = x;
+    origin.y = y;
   },
 
   subscribe(listener: TransitionListener): () => void {

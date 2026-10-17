@@ -81,6 +81,27 @@ export function StorySections() {
     zIndex: 20,
   };
 
+  // The Decision block is centered on the editorial column (52% of the viewport). On short windows
+  // shrink it from its left edge so it stays clear of the nav bar and the bottom edge.
+  useEffect(() => {
+    const el = decisionContainerRef.current;
+    if (!el) return;
+    const fit = () => {
+      const h = window.innerHeight;
+      const room = 2 * Math.min(h * 0.52 - 72, h * 0.48 - 24);
+      const scale = Math.min(1, room / el.offsetHeight);
+      el.style.transform = `translateY(-50%) scale(${scale.toFixed(3)})`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    window.addEventListener("resize", fit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, []);
+
   useEffect(() => {
     return subscribeScroll((state) => {
       // Phase 7.6: Single master visual progress timeline [0, 1]
@@ -987,8 +1008,13 @@ export function StorySections() {
         <div
           ref={decisionContainerRef}
           style={{
+            // Taller than the other blocks (task table, reason, CTA), so center it on the column
+            // instead of hanging it from the hero's top edge; it then lines up with the 3D
+            // constellation and the candidate cards.
             position: "absolute",
-            top: 0,
+            top: "50%",
+            transform: "translateY(-50%)",
+            transformOrigin: "0 50%",
             left: 0,
             width: "100%",
             opacity: 0,
@@ -1154,7 +1180,7 @@ export function StorySections() {
               style={{
                 willChange: "transform, opacity",
                 opacity: 0,
-                marginTop: "clamp(72px, calc(40svh - 288px), 144px)",
+                marginTop: "clamp(32px, calc(40svh - 288px), 144px)",
               }}
               className="mt-8 pt-5 pb-5 border-t border-b border-white/[0.12] flex flex-col gap-3 pointer-events-auto"
             >

@@ -7,8 +7,6 @@ import { useEffect, useRef, useState } from "react";
 import { transitionStore, TransitionMode } from "@/lib/transition/transitionStore";
 
 interface Particle {
-  x: number;
-  y: number;
   vx: number;
   vy: number;
   size: number;
@@ -34,8 +32,11 @@ export function SimulationTransition() {
 
       const w = canvas.width;
       const h = canvas.height;
-      const cx = w * 0.5;
-      const cy = h * 0.5;
+      // Leaving from the Decision CTA, start on the TASK_001 core wherever the camera framing puts
+      // it; nav-bar jumps (task possibly hidden or off screen) burst from the screen center.
+      const origin = mode === "decision_exit" ? transitionStore.getOrigin() : { x: 0.5, y: 0.5 };
+      const cx = w * origin.x;
+      const cy = h * origin.y;
 
       // When starting a new transition, initialize particle field
       if (progress < 0.05 && particlesRef.current.length === 0) {
@@ -47,8 +48,6 @@ export function SimulationTransition() {
           const angle = Math.random() * Math.PI * 2;
           const speed = (w * 0.0012) * (0.8 + Math.random() * 2.6);
           newParticles.push({
-            x: cx,
-            y: cy,
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
             size: 1.5 + Math.random() * 3.5,
@@ -138,8 +137,8 @@ export function SimulationTransition() {
           for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
             const dist = fragT * (w * 0.55);
-            const px = p.x + p.vx * dist * 0.7;
-            const py = p.y + p.vy * dist * 0.7;
+            const px = cx + p.vx * dist * 0.7;
+            const py = cy + p.vy * dist * 0.7;
             const particleAlpha = Math.max(0, (1 - fragT * 0.95));
 
             ctx.save();
@@ -171,8 +170,8 @@ export function SimulationTransition() {
           for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
             const dist = fragT * (w * 0.45);
-            const px = p.x + p.vx * dist * 0.6;
-            const py = p.y + p.vy * dist * 0.6;
+            const px = cx + p.vx * dist * 0.6;
+            const py = cy + p.vy * dist * 0.6;
             ctx.save();
             ctx.fillStyle = p.color;
             ctx.globalAlpha = Math.max(0, 1 - fragT);

@@ -156,9 +156,11 @@ export function DecisionVisualization() {
   // LOCAL: Upper-center, upright with front OLED screen facing camera
   // EDGE: Lower-left, front server face visible, substantially enlarged
   // CLOUD: Lower-right, 3/4 isometric orientation
-  const localPos = useMemo(() => new THREE.Vector3(26.00, 1.70, 0.00), []);
-  const edgePos = useMemo(() => new THREE.Vector3(24.25, -0.55, 0.00), []);
-  const cloudPos = useMemo(() => new THREE.Vector3(27.65, -0.65, 0.00), []);
+  // Kept tall and narrow so it fits the gap between the text column and the candidate cards
+  // (ScrollCameraController frames it there; update DECISION_* there if this extent changes).
+  const localPos = useMemo(() => new THREE.Vector3(26.00, 1.85, 0.00), []);
+  const edgePos = useMemo(() => new THREE.Vector3(25.05, -0.95, 0.00), []);
+  const cloudPos = useMemo(() => new THREE.Vector3(26.95, -1.05, 0.00), []);
 
   // Distinct Anchors originating from TASK_001's outer lattice vertices
   const taskTopAnchor = useMemo(() => new THREE.Vector3(26.00, 0.58, 0.02), []);
@@ -166,9 +168,9 @@ export function DecisionVisualization() {
   const taskRightAnchor = useMemo(() => new THREE.Vector3(26.14, 0.28, 0.02), []);
 
   // Dynamic World-Space Target Anchors (computed every frame from bounding boxes)
-  const localAnchor = useRef(new THREE.Vector3(26.00, 1.48, 0.05));
-  const edgeAnchor = useRef(new THREE.Vector3(24.25, -0.22, 0.05));
-  const cloudAnchor = useRef(new THREE.Vector3(27.40, -0.25, 0.05));
+  const localAnchor = useRef(new THREE.Vector3(26.00, 1.63, 0.05));
+  const edgeAnchor = useRef(new THREE.Vector3(25.05, -0.62, 0.05));
+  const cloudAnchor = useRef(new THREE.Vector3(26.70, -0.65, 0.05));
 
   // Scratch objects for zero-allocation per-frame bounding box calculations
   const tempBox = useRef(new THREE.Box3());
