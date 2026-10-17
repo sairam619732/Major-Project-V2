@@ -183,11 +183,9 @@ All metrics reflect actual empirical data from Phase 18 evaluated across **5 ind
 │   │   │   ├── inference.py           # DQNInferenceService (CPU-pinned)
 │   │   │   └── network.py             # QNetwork neural architecture
 │   │   ├── models/                    # Pydantic v2 Request/Response Schemas
-│   │   ├── services/                  # Evaluator, CV executor, worker client
-│   │   └── workers/                   # Edge/Cloud execution worker app
-│   ├── edge_server/                   # Standalone real edge execution server
-│   ├── scripts/                       # run_benchmark.py, run_edge_worker.py, run_cloud_worker.py, run_edge_server.py
-│   ├── tests/                         # Python test suites (unit, DQN, benchmark, API, workers)
+│   │   └── services/                  # Evaluator, CV executor (local in-process inference)
+│   ├── scripts/                       # run_benchmark.py
+│   ├── tests/                         # Python test suites (unit, DQN, benchmark, API)
 │   ├── docs/                          # DQN pipeline & evaluation methodology
 │   └── benchmarks/results/            # Generated evaluation results & reports (source of truth)
 ├── data/                              # Dataset (see data/README.md)
@@ -216,7 +214,7 @@ All metrics reflect actual empirical data from Phase 18 evaluated across **5 ind
 │   └── services/apiClient.ts          # API Client with Offline Fallback
 ├── tests/
 │   ├── unit/                          # Research data & store stability checks
-│   └── e2e/                           # Frontend ↔ backend ↔ worker integration suites
+│   └── e2e/                           # Frontend ↔ backend integration suites
 └── README.md
 ```
 
@@ -258,7 +256,7 @@ From the project root:
 cd backend
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-The FastAPI backend will start at `http://127.0.0.1:8000`.  
+The FastAPI backend will start at `http://127.0.0.1:8000`. It is the only server the project needs: whichever tier the DQN selects, uploaded workloads run in-process on the local machine, and EDGE/CLOUD network and queueing costs come from the cost model.  
 Interactive Swagger API documentation is available at `http://127.0.0.1:8000/docs`.
 
 ---

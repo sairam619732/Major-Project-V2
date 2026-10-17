@@ -18,7 +18,6 @@ from app.models.simulation import (
 from app.models.system import LocalNodeState, EdgeNodeState, CloudNodeState
 from app.services.evaluator import evaluate_simulation
 from app.services.cv_executor import cv_executor
-from app.services.worker_client import execute_on_worker
 from app.ml.inference import inference_service
 from app.ml.environment import compute_action_metrics
 
@@ -122,9 +121,9 @@ def _resolve_form_val(val: Any, default: Any) -> Any:
     summary="Execute Real Workload with Automatic DQN Offloading",
     description=(
         "Accepts single image, image batch, or video stream. Extracts real workload features, "
-        "invokes DQN to automatically select LOCAL, EDGE, or CLOUD, routes to the appropriate "
-        "execution worker (local process, Edge worker :8001, or Cloud worker :8002) via real HTTP, "
-        "and returns empirical detections and metrics."
+        "invokes DQN to automatically select LOCAL, EDGE, or CLOUD, runs the workload in-process "
+        "on the local host, and returns empirical detections and metrics. EDGE and CLOUD costs "
+        "come from the cost model; no external edge or cloud server is needed."
     ),
 )
 async def execute_simulation_task(
@@ -324,85 +323,34 @@ async def execute_simulation_task(
         "CLOUD": raw_q_values.get("cloud", 0.0),
     }
 
-    # STEP E: Route to Worker Based on DQN Decision
+    # STEP E: Execute on the local host. The DQN decision is kept and reported, but every tier runs
+    # in-process; EDGE/CLOUD network and queueing costs are modelled by compute_action_metrics.
+    workload_res = cv_executor.process_workload(
+        workload_type=w_type,
+        files_data=[(name, data) for name, data, _ in files_data],
+        tier="LOCAL",
+    )
+    exec_worker = "local-host-device"
     if decision == "LOCAL":
-        # 1. LOCAL EXECUTION (In-Process on host device)
-        workload_res = cv_executor.process_workload(
-            workload_type=w_type,
-            files_data=[(name, data) for name, data, _ in files_data],
-            tier="LOCAL",
-        )
-        exec_worker = "local-host-device"
-        exec_env = "LOCAL (On-Device Client NPU/CPU)"
+        exec_env = "LOCAL (On-Device CPU)"
         env_desc = "Executed locally on device without network transmission. Measured real neural inference compute."
-        processing_time_ms = workload_res["processing_time_ms"]
-        network_transfer_ms = 0.0
-        total_latency_ms = processing_time_ms
-        detections = workload_res["detections"]
-        detection_count = workload_res["detection_count"]
-        annotated_b64 = workload_res.get("annotated_image_base64")
-        batch_items = workload_res.get("batch_items", [])
-        processed_count = workload_res.get("processed_count", 1)
-        model_arch = workload_res.get("model_architecture", "SSDLite320_MobileNet_V3_Large")
-        task_status = "SUCCESS"
-        error_msg = None
-
-    elif decision == "EDGE":
-        # 2. REAL EDGE SERVER EXECUTION (HTTP Request to Edge Server at EDGE_SERVER_URL)
-        worker_res = await execute_on_worker(
-            tier="EDGE",
-            workload_type=w_type,
-            files_data=files_data,
-            task_id=actual_task_id,
-        )
-        if worker_res.get("status") == "FAILED" or not worker_res.get("success", True):
-            error_detail = worker_res.get(
-                "error_message",
-                "Edge server unreachable. Please verify EDGE_SERVER_URL configuration.",
-            )
-            # Fail cleanly and transparently with HTTP 503 so frontend displays the real connection error
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=error_detail,
-            )
-
-        exec_worker = worker_res.get("worker_id", "edge-server-node")
-        exec_env = "EDGE (Physical Remote Edge Server)"
-        env_desc = "Task offloaded to independent Edge server on LAN/Wi-Fi via real HTTP communication."
-        processing_time_ms = worker_res.get("processing_time_ms", 0.0)
-        network_transfer_ms = worker_res.get("network_transfer_ms", 0.0)
-        total_latency_ms = worker_res.get("total_latency_ms", 0.0)
-        detections = worker_res.get("detections", [])
-        detection_count = worker_res.get("detection_count", 0)
-        annotated_b64 = worker_res.get("annotated_image_base64")
-        batch_items = worker_res.get("batch_items", [])
-        processed_count = worker_res.get("processed_count", len(files_data))
-        model_arch = worker_res.get("model_architecture", "SSDLite320_MobileNet_V3_Large")
-        task_status = "SUCCESS"
-        error_msg = None
-
     else:
-        # 3. CLOUD EXECUTION: Deferred per Phase 14A requirements ("Do NOT implement cloud yet. Edge first.")
-        # Fall back to local execution with explicit telemetry attribution
-        workload_res = cv_executor.process_workload(
-            workload_type=w_type,
-            files_data=[(name, data) for name, data, _ in files_data],
-            tier="LOCAL",
+        exec_env = f"LOCAL HOST ({decision} tier simulated)"
+        env_desc = (
+            f"DQN selected {decision}. The workload ran in-process on the local host; "
+            f"{decision} network and queueing costs are estimated by the cost model."
         )
-        exec_worker = "local-host-device (Cloud Deferred in Phase 14A)"
-        exec_env = "LOCAL (Phase 14A: Edge First)"
-        env_desc = "Cloud tier deferred per Phase 14A specifications. Workload processed on local host."
-        processing_time_ms = workload_res["processing_time_ms"]
-        network_transfer_ms = 0.0
-        total_latency_ms = processing_time_ms
-        detections = workload_res["detections"]
-        detection_count = workload_res["detection_count"]
-        annotated_b64 = workload_res.get("annotated_image_base64")
-        batch_items = workload_res.get("batch_items", [])
-        processed_count = workload_res.get("processed_count", 1)
-        model_arch = workload_res.get("model_architecture", "SSDLite320_MobileNet_V3_Large")
-        task_status = "SUCCESS"
-        error_msg = None
+    processing_time_ms = workload_res["processing_time_ms"]
+    network_transfer_ms = 0.0
+    total_latency_ms = processing_time_ms
+    detections = workload_res["detections"]
+    detection_count = workload_res["detection_count"]
+    annotated_b64 = workload_res.get("annotated_image_base64")
+    batch_items = workload_res.get("batch_items", [])
+    processed_count = workload_res.get("processed_count", 1)
+    model_arch = workload_res.get("model_architecture", "SSDLite320_MobileNet_V3_Large")
+    task_status = "SUCCESS"
+    error_msg = None
 
     # Format detection items
     formatted_detections: List[ObjectDetectionResultItem] = []

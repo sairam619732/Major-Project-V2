@@ -910,16 +910,9 @@ export const simulationStore = {
       return result;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Execution error";
-      const isEdgeUnreachable =
-        msg.toLowerCase().includes("edge") &&
-        (msg.toLowerCase().includes("unreachable") ||
-          msg.toLowerCase().includes("connection") ||
-          msg.toLowerCase().includes("refused") ||
-          msg.toLowerCase().includes("timeout") ||
-          msg.toLowerCase().includes("503"));
 
       currentExecutionStage = "error";
-      currentStageLabel = isEdgeUnreachable ? "EDGE UNREACHABLE" : "EXECUTION FAILED";
+      currentStageLabel = "EXECUTION FAILED";
       currentExecutionError = msg;
       currentApiStatus = "error";
       currentApiError = msg;

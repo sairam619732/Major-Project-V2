@@ -271,8 +271,8 @@ export async function submitSimulationToBackend(
  * Submits an uploaded workload task (single image, image batch, or video) for
  * real neural execution and automatic DQN offloading.
  * Automatically extracts features on the backend, selects LOCAL, EDGE, or CLOUD via trained DQN,
- * executes neural processing on the selected tier worker (Local in-process, Edge port 8001, or Cloud port 8002),
- * and returns real empirical latency, processing times, transfer times, and detections.
+ * runs the neural processing in-process on the local host (EDGE/CLOUD costs come from the cost model),
+ * and returns real empirical latency, processing times and detections.
  */
 export async function executeTaskOffloading(
   fileOrFiles:
