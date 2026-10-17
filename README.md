@@ -80,11 +80,11 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full architectural document
 ### Simulation & Benchmarking
 - **Environment**: Custom discrete-event Markov Decision Process (`OffloadingEnvironment`)
 - **Action Selection**: Boltzmann Softmax Confidence ($\tau = 1.0$) and greedy evaluation
-- **Datasets**: Machine-readable JSON/CSV summaries and sample-level trajectory archives
+- **Datasets**: Synthetic offloading dataset generated from the environment's cost model, with a preprocessing pipeline (`data/`), plus JSON/CSV benchmark summaries
 
 ### Testing & Verification
-- **Python**: Python `unittest` framework (`test_phase18.py`, `test_phase17.py`, `test_dqn.py`, `test_benchmark.py`, `test_api.py`)
-- **Node.js**: Native Node test runners (`test_integration.mjs`, `test_phase16.mjs`)
+- **Python**: Python `unittest` framework (`backend/tests/`)
+- **Node.js**: Native Node test runners (`tests/unit/`, `tests/e2e/`)
 
 ---
 
@@ -179,35 +179,45 @@ All metrics reflect actual empirical data from Phase 18 evaluated across **5 ind
 │   │   │   ├── checkpoints/           # Saved PyTorch Model (.pt)
 │   │   │   ├── agent.py               # DQNAgent implementation
 │   │   │   ├── benchmark.py           # Multi-Seed Benchmark Engine
-│   │   │   ├── environment.py         # Discrete-event MDP Simulator
+│   │   │   ├── environment.py         # Discrete-event MDP Simulator & cost model
 │   │   │   ├── inference.py           # DQNInferenceService (CPU-pinned)
-│   │   │   └── model.py               # QNetwork neural architecture
+│   │   │   └── network.py             # QNetwork neural architecture
 │   │   ├── models/                    # Pydantic v2 Request/Response Schemas
-│   │   └── services/                  # Multi-Criteria Evaluator Service
-│   ├── benchmarks/results/            # Generated Evaluation Datasets & Reports
-│   ├── test_phase18.py                # Phase 18 Evaluation Test Suite (8 tests)
-│   ├── test_phase17.py                # Phase 17 DQN Integration Suite (6 tests)
-│   ├── test_dqn.py                    # Phase 14B DQN Unit Tests (10 tests)
-│   ├── test_benchmark.py              # Phase 15 Benchmark Tests (2 tests)
-│   └── test_api.py                    # FastAPI API Regression Suite
+│   │   ├── services/                  # Evaluator, CV executor, worker client
+│   │   └── workers/                   # Edge/Cloud execution worker app
+│   ├── edge_server/                   # Standalone real edge execution server
+│   ├── scripts/                       # run_benchmark.py, run_edge_worker.py, run_cloud_worker.py, run_edge_server.py
+│   ├── tests/                         # Python test suites (unit, DQN, benchmark, API, workers)
+│   ├── docs/                          # DQN pipeline & evaluation methodology
+│   └── benchmarks/results/            # Generated evaluation results & reports (source of truth)
+├── data/                              # Dataset (see data/README.md)
+│   ├── pipeline/                      # generate_dataset.py, preprocess_dataset.py
+│   ├── raw/                           # Generated dataset (read by /api/dataset)
+│   └── processed/                     # train/val/test splits + preprocessing report
 ├── docs/                              # Project Documentation
 │   ├── ARCHITECTURE.md                # System Architecture & Component Interaction
 │   ├── API_DOCUMENTATION.md           # REST API Contract & Request/Response Samples
 │   ├── EVALUATION.md                  # Comprehensive Scientific Evaluation Methodology
 │   └── DEMO_CHECKLIST.md              # College Presentation Runbook & Demo Script
-├── public/data/                       # Synced Machine-Readable Benchmark Artifacts
+├── public/
+│   ├── assets/                        # 3D models used by the landing page & simulation
+│   ├── data/                          # Benchmark summary, training history & report for /research
+│   └── samples/                       # Sample image/video workloads
+├── scripts/models/                    # Procedural GLB generators (Three.js, run with node)
 ├── src/                               # Next.js 16 Frontend
-│   ├── app/
-│   │   ├── page.tsx                   # Cinematic 3D Landing Page
-│   │   ├── simulation/page.tsx        # Interactive Multi-Tier Simulation
-│   │   └── research/page.tsx          # Research Results & Visualizations
+│   ├── app/                           # Routes (landing, simulation, research, dashboard pages, /api/dataset)
 │   ├── components/
+│   │   ├── 3d/                        # Landing page scene & models
 │   │   ├── simulation/                # Simulation Sliders, 3D Canvas & Editorial Rail
-│   │   └── research/                  # Charts, Comparison Tables, Trajectories
+│   │   ├── research/                  # Charts, Comparison Tables, Trajectories
+│   │   └── layout/  ui/  transitions/ # Dashboard shell, navigation, story sections
+│   ├── lib/                           # Decision engine, simulation state, 3D helpers
+│   ├── hooks/  store/  types/
 │   └── services/apiClient.ts          # API Client with Offline Fallback
-├── test_integration.mjs               # End-to-End API Integration Suite
-├── test_phase16.mjs                   # Research Visualization Verification Suite
-└── README.md                          # Project Documentation
+├── tests/
+│   ├── unit/                          # Research data & store stability checks
+│   └── e2e/                           # Frontend ↔ backend ↔ worker integration suites
+└── README.md
 ```
 
 ---
@@ -275,29 +285,30 @@ npm run start
 ```powershell
 cd backend
 # 1. Phase 18 Scientific Evaluation Suite
-.\.venv\Scripts\python.exe test_phase18.py
+.\.venv\Scripts\python.exe -m tests.test_phase18
 
 # 2. Phase 17 DQN Integration Suite
-.\.venv\Scripts\python.exe test_phase17.py
+.\.venv\Scripts\python.exe -m tests.test_phase17
 
 # 3. Phase 14B DQN Neural Architecture Suite
-.\.venv\Scripts\python.exe test_dqn.py
+.\.venv\Scripts\python.exe -m tests.test_dqn
 
 # 4. Phase 15 Benchmark Suite
-.\.venv\Scripts\python.exe test_benchmark.py
+.\.venv\Scripts\python.exe -m tests.test_benchmark
 
 # 5. Full Backend API Regression Suite (requires running server)
-.\.venv\Scripts\python.exe test_api.py
+.\.venv\Scripts\python.exe -m tests.test_api
 cd ..
 ```
 
 ### Frontend & End-to-End Integration Tests
+Run from the project root:
 ```bash
 # 1. Research Visualization Verification
-node test_phase16.mjs
+node tests/unit/test_phase16.mjs
 
 # 2. End-to-End Frontend-Backend Integration (requires running server)
-node test_integration.mjs
+node tests/e2e/test_integration.mjs
 ```
 
 ---
@@ -308,7 +319,7 @@ To execute the 5-seed empirical benchmark and re-generate all machine-readable d
 
 ```powershell
 cd backend
-.\.venv\Scripts\python.exe run_benchmark.py --seeds 42,101,2024,777,8888 --eval-episodes 100
+.\.venv\Scripts\python.exe scripts/run_benchmark.py --seeds 42,101,2024,777,8888 --eval-episodes 100
 ```
 
 This generates:
@@ -316,7 +327,9 @@ This generates:
 - `backend/benchmarks/results/evaluation_results.csv`
 - `backend/benchmarks/results/evaluation_samples.csv`
 - `backend/benchmarks/results/EVALUATION_REPORT.md`
-- Automatically synchronizes copies to `public/data/` for the `/research` visualization page.
+- Copies `benchmark_summary.json` and `BENCHMARK_REPORT.md` to `public/data/` for the `/research` visualization page.
+
+To rebuild the training dataset and its preprocessed splits, see [data/README.md](data/README.md).
 
 ---
 

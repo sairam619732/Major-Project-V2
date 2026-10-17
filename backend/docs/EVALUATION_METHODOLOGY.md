@@ -175,7 +175,7 @@ To reproduce the exact empirical evaluation results:
 ```bash
 # From backend directory
 cd backend
-.\.venv\Scripts\python.exe run_benchmark.py --seeds 42,101,2024,777,8888 --eval-episodes 100
+.\.venv\Scripts\python.exe scripts/run_benchmark.py --seeds 42,101,2024,777,8888 --eval-episodes 100
 ```
 
 All raw sample logs and summary metrics will be deterministically written to:

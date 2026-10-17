@@ -1,0 +1,250 @@
+{
+  "source": "data/raw/synthetic_cloud_edge_offloading_dataset.csv",
+  "seed": 42,
+  "rows": {
+    "raw": 20000,
+    "clean": 20000,
+    "dropped": {}
+  },
+  "features": {
+    "normalized": [
+      "data_size",
+      "cpu_demand",
+      "memory_demand",
+      "deadline",
+      "priority",
+      "local_cpu_available",
+      "local_memory_available",
+      "local_battery",
+      "local_base_latency",
+      "edge_cpu_load",
+      "edge_task_queue",
+      "edge_network_latency",
+      "edge_bandwidth",
+      "cloud_cpu_load",
+      "cloud_task_queue",
+      "cloud_network_latency",
+      "cloud_bandwidth"
+    ],
+    "one_hot": [
+      "task_type_image",
+      "task_type_video",
+      "task_type_sensor"
+    ],
+    "normalization": "backend/app/ml/environment.py state_to_vector (value / cap, clipped to [0, 1])",
+    "normalized_ranges": {
+      "data_size": {
+        "min": 0.05,
+        "max": 0.6
+      },
+      "cpu_demand": {
+        "min": 0.2,
+        "max": 0.9
+      },
+      "memory_demand": {
+        "min": 0.15,
+        "max": 0.75
+      },
+      "deadline": {
+        "min": 0.06,
+        "max": 0.5
+      },
+      "priority": {
+        "min": 0.0,
+        "max": 1.0
+      },
+      "local_cpu_available": {
+        "min": 0.3,
+        "max": 0.9
+      },
+      "local_memory_available": {
+        "min": 0.4,
+        "max": 0.85
+      },
+      "local_battery": {
+        "min": 0.4,
+        "max": 1.0
+      },
+      "local_base_latency": {
+        "min": 0.01,
+        "max": 0.06
+      },
+      "edge_cpu_load": {
+        "min": 0.2,
+        "max": 0.75
+      },
+      "edge_task_queue": {
+        "min": 0.0,
+        "max": 0.375
+      },
+      "edge_network_latency": {
+        "min": 0.05,
+        "max": 0.35
+      },
+      "edge_bandwidth": {
+        "min": 0.025,
+        "max": 0.5
+      },
+      "cloud_cpu_load": {
+        "min": 0.2,
+        "max": 0.8
+      },
+      "cloud_task_queue": {
+        "min": 0.066667,
+        "max": 0.833333
+      },
+      "cloud_network_latency": {
+        "min": 0.133333,
+        "max": 0.4
+      },
+      "cloud_bandwidth": {
+        "min": 0.0625,
+        "max": 0.5
+      }
+    }
+  },
+  "labels": {
+    "target": "optimal_action_index",
+    "classes": {
+      "0": "LOCAL",
+      "1": "EDGE",
+      "2": "CLOUD"
+    },
+    "auxiliary": "optimal_reward"
+  },
+  "raw_column_stats": {
+    "data_size_mb": {
+      "min": 5.0,
+      "max": 60.0,
+      "mean": 32.4794,
+      "std": 15.864
+    },
+    "cpu_demand_percent": {
+      "min": 20.0,
+      "max": 90.0,
+      "mean": 55.0502,
+      "std": 20.1624
+    },
+    "memory_demand_percent": {
+      "min": 15.0,
+      "max": 75.0,
+      "mean": 44.9743,
+      "std": 17.375
+    },
+    "deadline_ms": {
+      "min": 30.0,
+      "max": 250.0,
+      "mean": 139.8392,
+      "std": 63.3677
+    },
+    "priority": {
+      "min": 1,
+      "max": 5,
+      "mean": 2.9981,
+      "std": 1.423
+    },
+    "local_cpu_available_percent": {
+      "min": 30.0,
+      "max": 90.0,
+      "mean": 59.7776,
+      "std": 17.3674
+    },
+    "local_memory_available_percent": {
+      "min": 40.0,
+      "max": 85.0,
+      "mean": 62.5008,
+      "std": 12.9468
+    },
+    "local_battery_percent": {
+      "min": 40.0,
+      "max": 100.0,
+      "mean": 70.1243,
+      "std": 17.3663
+    },
+    "local_base_latency_ms": {
+      "min": 0.5,
+      "max": 3.0,
+      "mean": 1.749,
+      "std": 0.7232
+    },
+    "edge_cpu_load_percent": {
+      "min": 20.0,
+      "max": 75.0,
+      "mean": 47.5577,
+      "std": 15.8989
+    },
+    "edge_task_queue": {
+      "min": 0,
+      "max": 15,
+      "mean": 7.5266,
+      "std": 4.6117
+    },
+    "edge_network_latency_ms": {
+      "min": 5.0,
+      "max": 35.0,
+      "mean": 20.0295,
+      "std": 8.6329
+    },
+    "edge_bandwidth_gbps": {
+      "min": 1.0,
+      "max": 20.0,
+      "mean": 10.4378,
+      "std": 5.4958
+    },
+    "cloud_cpu_load_percent": {
+      "min": 20.0,
+      "max": 80.0,
+      "mean": 49.905,
+      "std": 17.3484
+    },
+    "cloud_task_queue": {
+      "min": 2,
+      "max": 25,
+      "mean": 13.5227,
+      "std": 6.9183
+    },
+    "cloud_network_latency_ms": {
+      "min": 40.0,
+      "max": 120.0,
+      "mean": 79.9921,
+      "std": 23.0586
+    },
+    "cloud_bandwidth_gbps": {
+      "min": 5.0,
+      "max": 40.0,
+      "mean": 22.579,
+      "std": 10.109
+    }
+  },
+  "splits": {
+    "train": {
+      "rows": 14000,
+      "class_counts": {
+        "LOCAL": 10771,
+        "EDGE": 3142,
+        "CLOUD": 87
+      }
+    },
+    "val": {
+      "rows": 3000,
+      "class_counts": {
+        "LOCAL": 2308,
+        "EDGE": 674,
+        "CLOUD": 18
+      }
+    },
+    "test": {
+      "rows": 3000,
+      "class_counts": {
+        "LOCAL": 2308,
+        "EDGE": 674,
+        "CLOUD": 18
+      }
+    }
+  },
+  "class_weights": {
+    "LOCAL": 0.4333,
+    "EDGE": 1.4853,
+    "CLOUD": 53.6398
+  }
+}

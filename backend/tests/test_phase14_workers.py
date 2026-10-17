@@ -157,9 +157,8 @@ async def run_tests():
 
         # Test Case E: Video Workload (using sample video from public/samples)
         print(f"\n--- Scenario E: Video Workload ---")
-        video_path = "../public/samples/sample_video.mp4"
-        if not os.path.exists(video_path):
-            video_path = "c:/Users/saira/.gemini/config/Major Project V2/public/samples/sample_video.mp4"
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        video_path = os.path.join(repo_root, "public", "samples", "sample_video.mp4")
         with open(video_path, "rb") as vf:
             video_bytes = vf.read()
         res_e = await client.post(

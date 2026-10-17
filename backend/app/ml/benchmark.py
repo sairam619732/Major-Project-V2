@@ -425,14 +425,9 @@ def run_empirical_benchmark(
         if not public_data.exists():
             public_data = (Path(__file__).resolve().parent.parent.parent.parent / "public" / "data").resolve()
         if public_data.exists():
+            # Only what the frontend reads (/research); the full set stays in benchmarks/results.
             for f_name in [
-                "evaluation_results.json",
-                "evaluation_results.csv",
-                "evaluation_samples.csv",
-                "EVALUATION_REPORT.md",
                 "benchmark_summary.json",
-                "benchmark_summary.csv",
-                "benchmark_samples.csv",
                 "BENCHMARK_REPORT.md",
             ]:
                 src_f = out_path / f_name
