@@ -1,11 +1,14 @@
 "use client";
 
+/* eslint-disable react-hooks/immutability -- R3F owns these mutable Three.js objects; frame callbacks update GPU resources without React renders. */
+
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { Group, PointLight, MeshBasicMaterial } from "three";
 import { scrollState } from "@/store/scrollStore";
+import { HOLOGRAM_LANDING, applyHologram, createHologramMaterial } from "@/lib/three/hologram";
 
 interface EdgeServerProps {
   position?: [number, number, number];
@@ -20,6 +23,7 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
 
   // References to emissive materials for synchronized processing pulse
   const emmisMatsRef = useRef<THREE.MeshStandardMaterial[]>([]);
+  const hologram = useMemo(() => (HOLOGRAM_LANDING ? createHologramMaterial("#34d399") : null), []);
 
   // Safe R3F model loading using the user's authentic Edge 3D GLB asset
   const { scene } = useGLTF("/assets/edge/data_center_rack.glb");
@@ -57,6 +61,10 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
     emmisMatsRef.current = [];
 
     const cl = scene.clone(true);
+    if (hologram) {
+      applyHologram(cl, hologram, { detail: 0.9 });
+      return cl;
+    }
     cl.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -113,7 +121,7 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
     });
 
     return cl;
-  }, [scene]);
+  }, [scene, hologram]);
 
   // Frame-rate independent visual progress damping layer
   useFrame((state) => {
@@ -145,6 +153,10 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
 
     for (let i = 0; i < emmisMatsRef.current.length; i++) {
       emmisMatsRef.current[i].emissiveIntensity = emissiveIntensity;
+    }
+    if (hologram) {
+      hologram.uniforms.uTime.value = t;
+      hologram.uniforms.uIntensity.value = 0.75 + 0.45 * processingT + 0.1 * syncPulse * processingT;
     }
 
     // 1. Primary Central Processing Light: strong but controlled green glow with physical rack spill
@@ -193,7 +205,8 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
         </mesh>
       )}
 
-      {/* Cinematic Lighting for Edge Computing Pod */}
+      {/* Cinematic Lighting for Edge Computing Pod (unlit holograms don't need it) */}
+      {!hologram && <>
       {/* 1. Primary Central Processing Light in front of rack blades (+X local face) */}
       <pointLight
         ref={pointLightRef}
@@ -241,6 +254,7 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
         decay={1.8}
         position={[1.8, 0.8, -0.6]}
       />
+      </>}
     </group>
   );
 }
