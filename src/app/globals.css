@@ -9,11 +9,9 @@
   --font-space-grotesk: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
+/* Box-sizing and margin/padding reset come from Tailwind's preflight (@layer base).
+   An unlayered `* { padding: 0; margin: 0 }` here would override every
+   p-* / m-* utility, since unlayered styles beat @layer utilities. */
 
 html {
   scroll-behavior: smooth;
