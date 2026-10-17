@@ -76,7 +76,7 @@ export function SimulationTopHeader({ onMenuClick }: { onMenuClick?: () => void 
   const currentTime = now?.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) ?? "--:--";
 
   return (
-    <header className="h-[70px] w-full bg-[#060b14] border-b border-white/[0.05] flex items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 flex-shrink-0">
+    <header className="h-[70px] w-full holo-chrome border-b flex items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 flex-shrink-0">
       <div className="flex items-center gap-3 min-w-0">
         {/* Mobile sidebar toggle */}
         <button
@@ -98,8 +98,8 @@ export function SimulationTopHeader({ onMenuClick }: { onMenuClick?: () => void 
                 href={link.href}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg border-b-2 transition-colors ${
                   active
-                    ? "text-blue-400 bg-blue-600/10 border-blue-500"
-                    : "text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.03]"
+                    ? "text-cyan-200 bg-cyan-400/10 border-cyan-400 shadow-[0_6px_18px_-10px_rgba(34,211,238,0.9)]"
+                    : "text-slate-400 border-transparent hover:text-cyan-100 hover:bg-cyan-400/[0.05]"
                 }`}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{link.icon}</svg>

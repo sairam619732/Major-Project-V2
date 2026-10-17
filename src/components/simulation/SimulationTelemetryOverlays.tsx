@@ -7,7 +7,7 @@ const TIERS = {
   cloud: { title: "Cloud DataCenter", color: "#a78bfa" },
 } as const;
 
-// Rendered inside the 3D canvas (drei <Html>) so each card stays anchored beside its model.
+// Positioned by SimulationSceneCanvas so each card stays beside its model.
 function TelemetryCard({ tier }: { tier: keyof typeof TIERS }) {
   const { state } = useSimulationState();
   const { title, color } = TIERS[tier];
@@ -15,7 +15,7 @@ function TelemetryCard({ tier }: { tier: keyof typeof TIERS }) {
 
   return (
     <div
-      className="pointer-events-none select-none flex flex-col gap-2 p-3 rounded-lg bg-[#030712]/80 backdrop-blur w-[160px]"
+      className="pointer-events-none select-none flex flex-col gap-2 p-3 rounded-lg holo-panel w-[160px]"
       style={{ border: `1px solid ${color}66`, boxShadow: `0 0 20px ${color}1a` }}
     >
       <div className="flex items-center gap-2 mb-1 pb-2" style={{ borderBottom: `1px solid ${color}4d` }}>

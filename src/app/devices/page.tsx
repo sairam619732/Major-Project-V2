@@ -18,13 +18,13 @@ export default function DevicesPage() {
   return (
     <DashboardLayout>
        <div className="flex flex-col gap-2 mb-6">
-          <h1 className="text-3xl font-bold font-sans tracking-tight">Devices</h1>
+          <h1 className="text-3xl font-bold font-sans tracking-tight holo-title">Devices</h1>
           <p className="text-[14px] text-slate-400">Topology and Connection Status of all execution endpoints</p>
        </div>
        
        <div className="flex flex-col gap-6">
          {/* Local Host Node */}
-         <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 shadow-xl">
+         <div className="p-6 holo-panel border rounded-xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
            <div className="flex flex-col gap-1">
              <div className="flex items-center gap-3">
                <h2 className="text-xl font-bold text-slate-200">Local Host Device</h2>
@@ -42,7 +42,7 @@ export default function DevicesPage() {
          </div>
 
          {/* Edge Server Node */}
-         <div className="p-6 bg-[#060b14] border border-emerald-900/30 rounded-xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 shadow-xl">
+         <div className="p-6 holo-panel border border-emerald-900/30 rounded-xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
            <div className="flex flex-col gap-1">
              <div className="flex items-center gap-3">
                <h2 className="text-xl font-bold text-emerald-400">Physical Edge Server</h2>
@@ -64,7 +64,7 @@ export default function DevicesPage() {
          </div>
 
          {/* Cloud Cluster Node */}
-         <div className="p-6 bg-[#060b14] border border-purple-900/30 rounded-xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 shadow-xl">
+         <div className="p-6 holo-panel border border-purple-900/30 rounded-xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
            <div className="flex flex-col gap-1">
              <div className="flex items-center gap-3">
                <h2 className="text-xl font-bold text-purple-400">Cloud Datacenter</h2>

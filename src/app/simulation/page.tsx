@@ -13,7 +13,7 @@ export default function SimulationPage() {
   return (
     <DashboardLayout>
        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold font-sans tracking-tight">Simulation</h1>
+          <h1 className="text-3xl font-bold font-sans tracking-tight holo-title">Simulation</h1>
           <p className="text-[14px] text-slate-400">Test dynamic offloading under changing conditions</p>
        </div>
        
@@ -32,7 +32,7 @@ export default function SimulationPage() {
              </div>
              
              {/* Row 2: 3D Topology */}
-             <div className="flex flex-col bg-[#060b14] border border-white/[0.05] rounded-xl overflow-hidden relative shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+             <div className="flex flex-col holo-panel border rounded-xl overflow-hidden relative">
                 <div className="px-5 py-4 border-b border-white/[0.05] flex items-center justify-between gap-3 bg-black/20">
                    <div className="flex items-center gap-3">
                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-400"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>

@@ -62,7 +62,7 @@ export function SimulationConfig() {
   const { state, experimentConditions, setExperimentCondition, applyPreset, updateTask } = useSimulationState();
 
   return (
-    <div className="flex flex-col p-6 rounded-xl bg-[#030712]/80 border border-cyan-500/30 text-slate-200 shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+    <div className="flex flex-col p-6 rounded-xl holo-panel border border-cyan-500/30 text-slate-200">
       <div className="flex items-center justify-between border-b border-cyan-500/40 pb-4 mb-5">
         <div className="flex items-center gap-3">
           <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_12px_#38bdf8]" />

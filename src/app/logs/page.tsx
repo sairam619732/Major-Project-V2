@@ -18,11 +18,11 @@ export default function LogsPage() {
   return (
     <DashboardLayout>
        <div className="flex flex-col gap-2 mb-6">
-          <h1 className="text-3xl font-bold font-sans tracking-tight">System Logs</h1>
+          <h1 className="text-3xl font-bold font-sans tracking-tight holo-title">System Logs</h1>
           <p className="text-[14px] text-slate-400">In-memory execution and system event trace</p>
        </div>
        
-       <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-4 shadow-xl">
+       <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
          {sessionLogs.length === 0 ? (
            <div className="py-12 flex items-center justify-center border border-white/[0.05] bg-black/40 rounded border-dashed">
              <span className="text-slate-500 font-mono text-[12px]">No logs recorded in this session.</span>

@@ -26,7 +26,7 @@ export function SimulationResultsPanel() {
   return (
     <div className="w-full flex flex-col gap-6 text-slate-200 select-none">
       {/* Execution Actions */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-[#0b1221] border border-white/[0.05] shadow-[0_0_20px_rgba(0,0,0,0.3)]">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl holo-panel border">
         <div className="flex flex-col">
           <span className="font-sans text-[15px] font-bold text-slate-200">
             Execution Engine
@@ -42,8 +42,8 @@ export function SimulationResultsPanel() {
           disabled={isExecuting || (workloadType === "IMAGE" && !uploadedImage) || (workloadType === "IMAGE_BATCH" && batchImages.length === 0) || (workloadType === "VIDEO" && !uploadedVideo)}
           className={`px-8 py-3 rounded-lg font-sans text-[14px] font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
             isExecuting
-              ? "bg-blue-900/30 text-blue-400 border border-blue-500/30"
-              : "bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] border border-blue-400/50"
+              ? "bg-cyan-900/30 text-cyan-300 border border-cyan-500/30"
+              : "holo-btn"
           }`}
         >
           {isExecuting ? "Executing..." : "Run Task"}
@@ -51,7 +51,7 @@ export function SimulationResultsPanel() {
       </div>
 
       {executionDetails && executionStage === "ready" && (
-        <div className="flex flex-col bg-[#0b1221] border border-white/[0.05] rounded-xl overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+        <div className="flex flex-col holo-panel border rounded-xl overflow-hidden">
           
           {/* Results Header with Tabs */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.05] bg-black/20">

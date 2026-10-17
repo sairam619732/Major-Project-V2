@@ -12,6 +12,7 @@ import { CloudDatacenter } from "./CloudDatacenter";
 import { CosmicTransition } from "./CosmicTransition";
 import { CloudToDecisionCosmic } from "./CloudToDecisionCosmic";
 import { DecisionVisualization } from "./DecisionVisualization";
+import { AdaptiveQuality, canvasQuality } from "@/lib/three/renderQuality";
 
 export function SceneCanvas() {
   const [mounted, setMounted] = useState(false);
@@ -24,18 +25,22 @@ export function SceneCanvas() {
     return null;
   }
 
+  const quality = canvasQuality();
+
   return (
     <div className="h-full w-full pointer-events-none">
       <Canvas
         camera={{ position: [0, 0, 7.2], fov: 36 }}
-        dpr={[1, 2]}
+        dpr={quality.dpr}
         gl={{
-          antialias: true,
+          antialias: quality.antialias,
           powerPreference: "high-performance",
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.15,
         }}
       >
+        <AdaptiveQuality />
+
         {/* Deep navy-black background */}
         <color attach="background" args={["#02040A"]} />
 

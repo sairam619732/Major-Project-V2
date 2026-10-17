@@ -65,7 +65,7 @@ export function SimulationTelemetryPanel() {
   return (
     <div className="flex flex-col gap-6 w-full">
       {/* REAL-TIME METRICS (LOCAL) */}
-      <div className="flex flex-col p-5 rounded-xl bg-[#0b1221] border border-white/[0.05] shadow-[0_0_20px_rgba(0,0,0,0.3)]">
+      <div className="flex flex-col p-5 rounded-xl holo-panel border">
         <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/[0.05]">
           <span className="font-sans text-[15px] text-slate-200 font-bold">
             Real-time Metrics
@@ -95,7 +95,7 @@ export function SimulationTelemetryPanel() {
       </div>
 
       {/* NETWORK LATENCY CARD */}
-      <div className="flex flex-col p-5 rounded-xl bg-[#030712]/90 border border-white/[0.1] shadow-[0_0_20px_rgba(0,0,0,0.3)]">
+      <div className="flex flex-col p-5 rounded-xl holo-panel border">
          <div className="flex items-center gap-3 border-b border-white/[0.08] pb-3 mb-4">
             <span className="font-mono text-[13px] tracking-[0.15em] uppercase text-slate-300 font-bold">
               NETWORK LATENCY
@@ -127,7 +127,7 @@ export function SimulationTelemetryPanel() {
       </div>
 
       {/* DQN STATE FEATURES */}
-      <div className="flex flex-col p-5 rounded-xl bg-[#030712]/90 border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.08)]">
+      <div className="flex flex-col p-5 rounded-xl holo-panel border border-amber-500/30">
         <div className="flex items-center justify-between border-b border-amber-500/30 pb-3 mb-4">
           <div className="flex items-center gap-3">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_12px_#f59e0b]" />

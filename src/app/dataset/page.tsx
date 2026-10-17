@@ -51,7 +51,7 @@ export default function DatasetPage() {
   return (
     <DashboardLayout>
        <div className="flex flex-col gap-3 mb-2">
-          <h1 className="text-3xl font-bold font-sans tracking-tight">DATASET</h1>
+          <h1 className="text-3xl font-bold font-sans tracking-tight holo-title">DATASET</h1>
           <p className="text-[14px] text-slate-400">
             Synthetic training and evaluation data for DQN-based cloud-edge task offloading.
           </p>
@@ -73,19 +73,19 @@ export default function DatasetPage() {
          <div className="flex flex-col gap-8">
            {/* Row 1: Overview Cards */}
            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="p-5 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-1 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+              <div className="p-5 holo-panel border rounded-xl flex flex-col gap-1">
                 <span className="text-slate-400 font-mono text-[10px] uppercase tracking-wider">Total Samples</span>
                 <span className="text-2xl font-bold text-slate-200">{data.meta.totalSamples.toLocaleString()}</span>
               </div>
-              <div className="p-5 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-1 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+              <div className="p-5 holo-panel border rounded-xl flex flex-col gap-1">
                 <span className="text-slate-400 font-mono text-[10px] uppercase tracking-wider">Features</span>
                 <span className="text-2xl font-bold text-blue-400">{data.meta.numFeatures} Columns</span>
               </div>
-              <div className="p-5 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-1 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+              <div className="p-5 holo-panel border rounded-xl flex flex-col gap-1">
                 <span className="text-slate-400 font-mono text-[10px] uppercase tracking-wider">Dataset Type</span>
                 <span className="text-2xl font-bold text-emerald-400">Synthetic</span>
               </div>
-              <div className="p-5 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-1 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+              <div className="p-5 holo-panel border rounded-xl flex flex-col gap-1">
                 <span className="text-slate-400 font-mono text-[10px] uppercase tracking-wider">Domain</span>
                 <span className="text-[15px] font-bold text-slate-200 mt-1">Cloud-Edge Offloading</span>
               </div>
@@ -94,7 +94,7 @@ export default function DatasetPage() {
            {/* Row 2: Distributions and Rewards */}
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Task Types */}
-              <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-4 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+              <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
                  <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase">Task Type Distribution</h2>
                  <div className="flex flex-col gap-3 mt-2">
                    {Object.entries(data.distribution.taskType).map(([type, count]: [string, any]) => {
@@ -115,7 +115,7 @@ export default function DatasetPage() {
               </div>
 
               {/* Optimal Action */}
-              <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-4 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+              <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
                  <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase">Optimal Offloading Distribution</h2>
                  <div className="flex flex-col gap-3 mt-2">
                    {[
@@ -143,7 +143,7 @@ export default function DatasetPage() {
               </div>
 
               {/* Reward Analysis */}
-              <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-4 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+              <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
                  <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase">Reward Analysis</h2>
                  <div className="grid grid-cols-2 gap-4 mt-2">
                     <div className="flex flex-col gap-1 bg-black/40 p-3 rounded border border-white/[0.05]">
@@ -168,7 +168,7 @@ export default function DatasetPage() {
 
            {/* Row 3: DQN Connection */}
            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-12 p-6 bg-[#060b14] border border-orange-500/30 rounded-xl flex flex-col gap-4 shadow-[0_0_20px_rgba(249,115,22,0.05)] relative overflow-hidden">
+              <div className="lg:col-span-12 p-6 holo-panel border border-orange-500/30 rounded-xl flex flex-col gap-4 relative overflow-hidden">
                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                     <svg width="120" height="120" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                  </div>
@@ -209,7 +209,7 @@ export default function DatasetPage() {
            </div>
 
            {/* Row 4: Data Table Preview */}
-           <div className="p-6 bg-[#060b14] border border-white/[0.05] rounded-xl flex flex-col gap-4 shadow-[0_0_20px_rgba(0,0,0,0.2)]">
+           <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                  <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase">Data Sample Preview</h2>
                  
