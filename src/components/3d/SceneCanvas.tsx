@@ -13,6 +13,8 @@ import { CosmicTransition } from "./CosmicTransition";
 import { CloudToDecisionCosmic } from "./CloudToDecisionCosmic";
 import { DecisionVisualization } from "./DecisionVisualization";
 import { AdaptiveQuality, canvasQuality } from "@/lib/three/renderQuality";
+import { HOLOGRAM_LANDING } from "@/lib/three/hologram";
+import { HologramLens } from "@/lib/three/HologramLens";
 
 export function SceneCanvas() {
   const [mounted, setMounted] = useState(false);
@@ -40,6 +42,7 @@ export function SceneCanvas() {
         }}
       >
         <AdaptiveQuality />
+        {HOLOGRAM_LANDING && <HologramLens radius={150} />}
 
         {/* Deep navy-black background */}
         <color attach="background" args={["#02040A"]} />

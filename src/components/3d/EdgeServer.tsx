@@ -8,7 +8,7 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { Group, PointLight, MeshBasicMaterial } from "three";
 import { scrollState } from "@/store/scrollStore";
-import { HOLOGRAM_LANDING, applyHologram, createHologramMaterial } from "@/lib/three/hologram";
+import { HOLOGRAM_LANDING, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
 
 interface EdgeServerProps {
   position?: [number, number, number];
@@ -61,10 +61,6 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
     emmisMatsRef.current = [];
 
     const cl = scene.clone(true);
-    if (hologram) {
-      applyHologram(cl, hologram, { detail: 0.9 });
-      return cl;
-    }
     cl.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -120,6 +116,8 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
       }
     });
 
+    // Hologram twin outside the hover lens; the real model above shows inside it.
+    if (hologram) addHologramLayer(cl, hologram, { detail: 0.9 });
     return cl;
   }, [scene, hologram]);
 
@@ -205,8 +203,7 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
         </mesh>
       )}
 
-      {/* Cinematic Lighting for Edge Computing Pod (unlit holograms don't need it) */}
-      {!hologram && <>
+      {/* Cinematic Lighting for Edge Computing Pod */}
       {/* 1. Primary Central Processing Light in front of rack blades (+X local face) */}
       <pointLight
         ref={pointLightRef}
@@ -254,7 +251,6 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
         decay={1.8}
         position={[1.8, 0.8, -0.6]}
       />
-      </>}
     </group>
   );
 }

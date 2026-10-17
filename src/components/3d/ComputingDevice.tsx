@@ -8,7 +8,7 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { Group } from "three";
 import { scrollState } from "@/store/scrollStore";
-import { HOLOGRAM_LANDING, applyHologram, createHologramMaterial } from "@/lib/three/hologram";
+import { HOLOGRAM_LANDING, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
 
 export function ComputingDevice() {
   const groupRef = useRef<Group>(null);
@@ -196,13 +196,6 @@ export function ComputingDevice() {
     emmisMatsRef.current = [];
 
     const cl = scene.clone(true);
-    if (hologram) {
-      const holoScreens = applyHologram(cl, hologram, {
-        screen: screenTexture ? { map: screenTexture, color: "#7dd3fc" } : undefined,
-        detail: 0.35,
-      });
-      return { clonedScene: cl, holoScreens };
-    }
     cl.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -240,7 +233,14 @@ export function ComputingDevice() {
         }
       }
     });
-    return { clonedScene: cl, holoScreens: [] };
+    // Hologram twin outside the hover lens; the real model above shows inside it.
+    const holoScreens = hologram
+      ? addHologramLayer(cl, hologram, {
+          screen: screenTexture ? { map: screenTexture, color: "#7dd3fc" } : undefined,
+          detail: 0.35,
+        })
+      : [];
+    return { clonedScene: cl, holoScreens };
   }, [scene, screenTexture, hologram]);
 
   // Gentle idle breathing animation + continuous scroll-driven screen activation (Timeline: 0.28–0.58)

@@ -25,7 +25,7 @@ import {
 } from "@/lib/offloading/decisionEngine";
 import { simulationStore } from "@/lib/simulation/simulationState";
 import { transitionStore } from "@/lib/transition/transitionStore";
-import { HOLOGRAM_LANDING, applyHologram, createHologramMaterial } from "@/lib/three/hologram";
+import { HOLOGRAM_LANDING, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
 
 // Smooth Hermite interpolation helper
 function smoothstep(min: number, max: number, value: number) {
@@ -206,13 +206,6 @@ export function DecisionVisualization() {
   const { clonedTablet, holoScreens } = useMemo(() => {
     tabletEmissivesRef.current = [];
     const cl = tabletScene.clone(true);
-    if (holo) {
-      const holoScreens = applyHologram(cl, holo.local, {
-        screen: tabletScreenTexture ? { map: tabletScreenTexture, color: "#fcd34d" } : undefined,
-        detail: 0.35,
-      });
-      return { clonedTablet: cl, holoScreens };
-    }
 
     cl.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
@@ -246,17 +239,20 @@ export function DecisionVisualization() {
       }
     });
 
-    return { clonedTablet: cl, holoScreens: [] };
+    // Hologram twin outside the hover lens; the real model above shows inside it.
+    const holoScreens = holo
+      ? addHologramLayer(cl, holo.local, {
+          screen: tabletScreenTexture ? { map: tabletScreenTexture, color: "#fcd34d" } : undefined,
+          detail: 0.35,
+        })
+      : [];
+    return { clonedTablet: cl, holoScreens };
   }, [tabletScene, tabletScreenTexture, holo]);
 
   // 5B. Cloned Compact Edge Server (EDGE - Substantially enlarged)
   const clonedEdge = useMemo(() => {
     edgeEmissivesRef.current = [];
     const cl = edgeScene.clone(true);
-    if (holo) {
-      applyHologram(cl, holo.edge, { detail: 0.9 });
-      return cl;
-    }
 
     cl.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
@@ -300,6 +296,7 @@ export function DecisionVisualization() {
       }
     });
 
+    if (holo) addHologramLayer(cl, holo.edge, { detail: 0.9 });
     return cl;
   }, [edgeScene, holo]);
 
@@ -307,10 +304,6 @@ export function DecisionVisualization() {
   const clonedCloud = useMemo(() => {
     cloudEmissivesRef.current = [];
     const cl = cloudScene.clone(true);
-    if (holo) {
-      applyHologram(cl, holo.cloud);
-      return cl;
-    }
 
     cl.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
@@ -345,6 +338,7 @@ export function DecisionVisualization() {
       }
     });
 
+    if (holo) addHologramLayer(cl, holo.cloud);
     return cl;
   }, [cloudScene, holo]);
 
@@ -774,15 +768,13 @@ export function DecisionVisualization() {
         <group rotation={[Math.PI / 2, 0, 0]}>
           <primitive object={clonedTablet} />
         </group>
-        {!holo && (
-          <pointLight
-            ref={localLightRef}
-            color="#f59e0b"
-            distance={3.2}
-            intensity={0.6}
-            position={[0, 0.1, 0.4]}
-          />
-        )}
+        <pointLight
+          ref={localLightRef}
+          color="#f59e0b"
+          distance={3.2}
+          intensity={0.6}
+          position={[0, 0.1, 0.4]}
+        />
       </group>
 
       {/* ==================================================
@@ -795,23 +787,19 @@ export function DecisionVisualization() {
         rotation={[0.08, -1.75, 0.0]}
       >
         <primitive object={clonedEdge} position={[0, -1.157, 0]} />
-        {!holo && (
-          <>
-            <pointLight
-              ref={edgePulseLightRef}
-              color="#10f08e"
-              distance={4.8}
-              intensity={2.8}
-              position={[0.60, 0.15, 0.0]}
-            />
-            <pointLight
-              color="#05df72"
-              distance={3.5}
-              intensity={1.8}
-              position={[0.55, 0.70, 0.0]}
-            />
-          </>
-        )}
+        <pointLight
+          ref={edgePulseLightRef}
+          color="#10f08e"
+          distance={4.8}
+          intensity={2.8}
+          position={[0.60, 0.15, 0.0]}
+        />
+        <pointLight
+          color="#05df72"
+          distance={3.5}
+          intensity={1.8}
+          position={[0.55, 0.70, 0.0]}
+        />
       </group>
 
       {/* Selection Halo Ring at Server Base */}
@@ -832,15 +820,13 @@ export function DecisionVisualization() {
         rotation={[0.03, -1.15, 0.0]}
       >
         <primitive object={clonedCloud} />
-        {!holo && (
-          <pointLight
-            ref={cloudLightRef}
-            color="#8b5cf6"
-            distance={3.4}
-            intensity={0.7}
-            position={[0, 1.4, 0]}
-          />
-        )}
+        <pointLight
+          ref={cloudLightRef}
+          color="#8b5cf6"
+          distance={3.4}
+          intensity={0.7}
+          position={[0, 1.4, 0]}
+        />
       </group>
     </group>
   );

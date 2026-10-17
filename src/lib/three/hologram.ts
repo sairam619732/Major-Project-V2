@@ -4,6 +4,21 @@ import * as THREE from "three";
 export const HOLOGRAM_SIMULATION = true; // /simulation topology panel
 export const HOLOGRAM_LANDING = true; // scroll-story models on the landing page
 
+/**
+ * Scanner lens: inside a circle around the pointer the real (PBR) model shows through the hologram.
+ * Center/radius are in drawing-buffer pixels (gl_FragCoord space) and are driven by <HologramLens />.
+ */
+export const hologramLens = {
+  uLensCenter: { value: new THREE.Vector2(-1e5, -1e5) },
+  uLensRadius: { value: 0 },
+};
+
+/**
+ * Camera layer holding the real models. <HologramLens /> enables it only while the lens is open,
+ * so the PBR copies cost nothing when nobody is hovering.
+ */
+export const REAL_MODEL_LAYER = 1;
+
 const VERTEX = /* glsl */ `
   varying vec2 vUv;
   varying vec3 vNormal;
@@ -32,11 +47,17 @@ const FRAGMENT = /* glsl */ `
   uniform float uIntensity;
   uniform float uDetail;
   uniform sampler2D uMap;
+  uniform vec2 uLensCenter;
+  uniform float uLensRadius;
   varying vec2 vUv;
   varying vec3 vNormal;
   varying vec3 vViewPos;
   varying float vWorldY;
   void main() {
+    // Inside the scanner lens the real model is drawn instead.
+    float lensDist = distance(gl_FragCoord.xy, uLensCenter);
+    if (lensDist < uLensRadius) discard;
+
     vec3 n = normalize(vNormal);
     vec3 viewDir = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(-vViewPos);
     float fresnel = pow(1.0 - abs(dot(n, viewDir)), 2.0);
@@ -51,7 +72,9 @@ const FRAGMENT = /* glsl */ `
       base += uDetail * dot(texture2D(uMap, vUv).rgb, vec3(0.299, 0.587, 0.114));
     #endif
     float glow = base * scan * flicker * uIntensity;
-    gl_FragColor = vec4(uColor * glow, 1.0);
+    // Bright ring where the lens cuts through the hologram.
+    float lensRim = step(1.0, uLensRadius) * (1.0 - smoothstep(0.0, 12.0, lensDist - uLensRadius));
+    gl_FragColor = vec4(uColor * (glow + 1.6 * lensRim * uIntensity), 1.0);
   }
 `;
 
@@ -62,6 +85,8 @@ export type HologramMaterial = THREE.ShaderMaterial & {
     uIntensity: { value: number };
     uDetail: { value: number };
     uMap: { value: THREE.Texture | null };
+    uLensCenter: { value: THREE.Vector2 };
+    uLensRadius: { value: number };
   };
 };
 
@@ -78,6 +103,7 @@ export function createHologramMaterial(color: THREE.ColorRepresentation, side: T
       uIntensity: { value: 1 },
       uDetail: { value: 0 },
       uMap: { value: null },
+      ...hologramLens,
     },
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
@@ -89,9 +115,26 @@ export function createHologramMaterial(color: THREE.ColorRepresentation, side: T
   }) as HologramMaterial;
 }
 
+/** Make a built-in material draw only inside (`"inside"`) or outside (`"outside"`) the scanner lens. */
+function clipToLens(material: THREE.Material, keep: "inside" | "outside") {
+  const test = keep === "inside" ? ">" : "<";
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uLensCenter = hologramLens.uLensCenter;
+    shader.uniforms.uLensRadius = hologramLens.uLensRadius;
+    shader.fragmentShader =
+      "uniform vec2 uLensCenter;\nuniform float uLensRadius;\n" +
+      shader.fragmentShader.replace(
+        "void main() {",
+        `void main() {\n  if (distance(gl_FragCoord.xy, uLensCenter) ${test} uLensRadius) discard;`,
+      );
+  };
+  material.customProgramCacheKey = () => `hologram-lens-${keep}`;
+  material.needsUpdate = true;
+}
+
 /** A screen surface that keeps its texture but projects it as additive light in the hologram colour. */
 export function createHologramScreenMaterial(map: THREE.Texture, color: THREE.ColorRepresentation) {
-  return new THREE.MeshBasicMaterial({
+  const material = new THREE.MeshBasicMaterial({
     map,
     color,
     transparent: true,
@@ -100,16 +143,20 @@ export function createHologramScreenMaterial(map: THREE.Texture, color: THREE.Co
     depthWrite: false,
     toneMapped: false,
   });
+  clipToLens(material, "outside");
+  return material;
 }
 
 /**
- * Swap every mesh under `root` to `hologram`. Meshes whose name contains "screen" get a textured
- * screen material instead when `screen` is given. With `detail` > 0, meshes whose original material
- * has a (emissive) texture get a variant that adds that texture's brightness as glowing detail; the
- * variants share the base material's animated uniforms, so driving `hologram.uniforms` drives all.
- * Returns the screen materials that were created.
+ * Give every mesh under `root` a hologram twin. The original (already configured PBR) meshes move to
+ * REAL_MODEL_LAYER and are clipped to the scanner lens; the hologram twins draw everywhere else.
+ *
+ * Meshes whose name contains "screen" get a textured hologram screen when `screen` is given. With
+ * `detail` > 0, meshes whose original material has a (emissive) texture get a hologram variant that
+ * adds that texture's brightness as glowing detail. Variants share the base material's uniforms, so
+ * driving `hologram.uniforms` drives all of them. Returns the hologram screen materials.
  */
-export function applyHologram(
+export function addHologramLayer(
   root: THREE.Object3D,
   hologram: HologramMaterial,
   options: { screen?: { map: THREE.Texture; color: THREE.ColorRepresentation }; detail?: number } = {},
@@ -132,18 +179,36 @@ export function applyHologram(
     return variant;
   };
 
+  const meshes: THREE.Mesh[] = [];
   root.traverse((child) => {
-    if (!(child as THREE.Mesh).isMesh) return;
-    const mesh = child as THREE.Mesh;
+    if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh);
+  });
+
+  for (const mesh of meshes) {
     mesh.castShadow = false;
     mesh.receiveShadow = false;
+    (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => clipToLens(m, "inside"));
+    mesh.layers.set(REAL_MODEL_LAYER);
+
+    let material: THREE.Material;
     if (screen && mesh.name.toLowerCase().includes("screen")) {
-      const mat = createHologramScreenMaterial(screen.map, screen.color);
-      screens.push(mat);
-      mesh.material = mat;
+      const screenMaterial = createHologramScreenMaterial(screen.map, screen.color);
+      screens.push(screenMaterial);
+      material = screenMaterial;
     } else {
-      mesh.material = variantFor(mesh.material);
+      material = variantFor(mesh.material);
     }
-  });
+
+    const source = mesh as THREE.InstancedMesh;
+    const twin = source.isInstancedMesh
+      ? Object.assign(new THREE.InstancedMesh(source.geometry, material, source.count), { instanceMatrix: source.instanceMatrix })
+      : new THREE.Mesh(mesh.geometry, material);
+    twin.name = `${mesh.name}__hologram`;
+    twin.position.copy(mesh.position);
+    twin.quaternion.copy(mesh.quaternion);
+    twin.scale.copy(mesh.scale);
+    twin.frustumCulled = mesh.frustumCulled;
+    mesh.parent?.add(twin);
+  }
   return screens;
 }
