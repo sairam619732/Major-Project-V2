@@ -18,13 +18,20 @@ const MODELS = {
 } satisfies Record<Target, { url: string; position: [number, number, number]; rotation: [number, number, number]; size: number }>;
 const TASK = new THREE.Vector3(0, .25, .5);
 
+// World-space extent of the topology, including labels (tablet label at y=3, rack labels at y=-2.7).
+// Decrease these to increase visual scale (zoom in).
+const VIEW_WIDTH = 5.2;
+const VIEW_HEIGHT = 6.6;
+const VIEW_CENTER_Y = 0.15;
+const pixelsPerUnitFor = (size: { width: number; height: number }) =>
+  Math.min(size.width / VIEW_WIDTH, size.height / VIEW_HEIGHT);
+
 function FitCamera() {
   const { camera, size } = useThree();
   useLayoutEffect(() => {
     const ortho = camera as THREE.OrthographicCamera;
     // Fit the whole topology, including labels, to either canvas dimension.
-    // Decrease denominator to increase visual scale (zoom in).
-    ortho.zoom = Math.min(size.width / 5.2, size.height / 5.2);
+    ortho.zoom = pixelsPerUnitFor(size);
     ortho.updateProjectionMatrix();
   }, [camera, size]);
   return null;
@@ -33,7 +40,7 @@ function FitCamera() {
 function Label({ children, color = "#94a3b8" }: { children: React.ReactNode; color?: string }) {
   const { size } = useThree();
   // Match the existing labels under FitCamera's orthographic framing.
-  const pixelsPerUnit = Math.min(size.width / 5.2, size.height / 5.2);
+  const pixelsPerUnit = pixelsPerUnitFor(size);
   return (
     <Text
       font="/fonts/GeistMono-Medium.ttf"
@@ -295,7 +302,7 @@ function Task() {
 
 export function SimulationSceneCanvas() {
   return <div style={{ width: "100%", height: "100%", position: "relative" }}>
-    <Canvas orthographic camera={{ position: [0, 0, 12], near: .1, far: 100 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true }}>
+    <Canvas orthographic camera={{ position: [0, VIEW_CENTER_Y, 12], near: .1, far: 100 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true }}>
       <FitCamera />
       <ambientLight intensity={1.1} />
       <directionalLight position={[2, 4, 6]} intensity={3} color="#e2e8f0" />

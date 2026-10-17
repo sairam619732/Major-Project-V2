@@ -6,7 +6,7 @@ export function SimulationEdgeTelemetryOverlay() {
   const { state } = useSimulationState();
   
   return (
-    <div className="absolute top-4 right-[60%] pointer-events-none z-10 hidden md:flex flex-col gap-2 p-3 rounded-lg bg-[#030712]/80 backdrop-blur border border-[#34d399]/40 shadow-[0_0_20px_rgba(52,211,153,0.1)] w-[160px]">
+    <div className="absolute top-4 left-4 pointer-events-none z-10 hidden md:flex flex-col gap-2 p-3 rounded-lg bg-[#030712]/80 backdrop-blur border border-[#34d399]/40 shadow-[0_0_20px_rgba(52,211,153,0.1)] w-[160px]">
       <div className="flex items-center gap-2 mb-1 border-b border-[#34d399]/30 pb-2">
          <span className="w-1.5 h-1.5 rounded-full bg-[#34d399] shadow-[0_0_8px_#34d399]" />
          <span className="font-mono text-[10px] uppercase text-[#34d399] font-bold tracking-widest">Edge Server</span>
