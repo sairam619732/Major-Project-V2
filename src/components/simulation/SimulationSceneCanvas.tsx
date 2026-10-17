@@ -20,6 +20,59 @@ const MODELS = {
 } satisfies Record<Target, { url: string; position: [number, number, number]; rotation: [number, number, number]; size: number }>;
 const TASK = new THREE.Vector3(0, .25, .5);
 
+// Render the three models as tinted holograms. Set to false to restore the original PBR shading.
+const HOLOGRAM_MODELS = true;
+
+const HOLOGRAM_VERTEX = /* glsl */ `
+  varying vec3 vNormal;
+  varying float vWorldY;
+  void main() {
+    vec4 pos = vec4(position, 1.0);
+    vec3 n = normal;
+    #ifdef USE_INSTANCING
+      pos = instanceMatrix * pos;
+      n = mat3(instanceMatrix) * n;
+    #endif
+    vec4 world = modelMatrix * pos;
+    vWorldY = world.y;
+    vNormal = normalize(normalMatrix * n);
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+const HOLOGRAM_FRAGMENT = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uTime;
+  uniform float uIntensity;
+  varying vec3 vNormal;
+  varying float vWorldY;
+  void main() {
+    vec3 n = normalize(vNormal);
+    // Orthographic camera looks straight down view-space -Z.
+    float fresnel = pow(1.0 - abs(n.z), 2.0);
+    // Normal discontinuities light up panel seams, giving a wireframe-like outline.
+    float crease = clamp(length(fwidth(n)) * 5.0, 0.0, 1.0);
+    float scan = 0.65 + 0.35 * sin(gl_FragCoord.y * 1.3 - uTime * 4.0);
+    float sweep = smoothstep(0.93, 1.0, fract(vWorldY * 0.35 - uTime * 0.2));
+    float flicker = 0.95 + 0.05 * sin(uTime * 37.0);
+    float glow = (0.08 + 1.1 * fresnel + 0.7 * crease + 0.5 * sweep) * scan * flicker * uIntensity;
+    gl_FragColor = vec4(uColor * glow, 1.0);
+  }
+`;
+
+function createHologramMaterial(color: string, side: THREE.Side) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(color) }, uTime: { value: 0 }, uIntensity: { value: 1 } },
+    vertexShader: HOLOGRAM_VERTEX,
+    fragmentShader: HOLOGRAM_FRAGMENT,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side,
+    toneMapped: false,
+  });
+}
+
 // World-space extent of the topology, including labels (tablet label at y=3, rack labels at y=-2.7).
 // Decrease these to increase visual scale (zoom in).
 const VIEW_WIDTH = 7.6;
@@ -169,10 +222,20 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
     texture.colorSpace = THREE.SRGBColorSpace;
     return { canvas, texture };
   }, [target]);
+  // The dense cloud hall shows front faces only, otherwise its stacked additive layers blow out to white.
+  const hologram = useMemo(() =>
+    HOLOGRAM_MODELS ? createHologramMaterial(COLORS[target], target === "cloud" ? THREE.FrontSide : THREE.DoubleSide) : null, [target]);
   const model = useMemo(() => {
     const clone = scene.clone(true);
     clone.traverse(child => {
       if (!(child instanceof THREE.Mesh)) return;
+      if (hologram) {
+        // The tablet screen keeps its live telemetry texture, projected in the tier colour.
+        child.material = screen && child.name.toLowerCase().includes("screen")
+          ? new THREE.MeshBasicMaterial({ map: screen.texture, color: COLORS[target], transparent: true, opacity: .95, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+          : hologram;
+        return;
+      }
       const copy = (original: THREE.Material) => {
         const mat = original.clone();
         if (mat instanceof THREE.MeshStandardMaterial) {
@@ -203,7 +266,7 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
     clone.position.sub(box.getCenter(new THREE.Vector3()));
     clone.updateWorldMatrix(true, true);
     return clone;
-  }, [scene, config, screen, target]);
+  }, [scene, config, screen, target, hologram]);
   const resources = useMemo(() => {
     const initialPoints = target === "cloud" ? [TASK, TASK, TASK] : [TASK, TASK];
     const geometry = new THREE.BufferGeometry().setFromPoints(initialPoints);
@@ -227,6 +290,11 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
     if (!group.current) return;
     const decision = simulationStore.getDecision();
     weight.current = THREE.MathUtils.damp(weight.current, decision.selectedTarget === target ? 1 : 0, 5, delta);
+    if (hologram) {
+      hologram.uniforms.uTime.value = clock.elapsedTime;
+      // The tier the DQN agent picked projects brighter.
+      hologram.uniforms.uIntensity.value = .65 + weight.current * .4;
+    }
     // Measure only visible model geometry after final normalization and placement.
     group.current.updateWorldMatrix(true, true);
     resources.box.setFromObject(model);
