@@ -8,7 +8,7 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { Group, PointLight } from "three";
 import { scrollState } from "@/store/scrollStore";
-import { HOLOGRAM_LANDING, applyHologram, createHologramMaterial } from "@/lib/three/hologram";
+import { HOLOGRAM_LANDING, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
 
 interface CloudDatacenterProps {
   position?: [number, number, number];
@@ -44,10 +44,6 @@ export function CloudDatacenter({
     emmisItemsRef.current = [];
 
     const cl = scene.clone(true);
-    if (hologram) {
-      applyHologram(cl, hologram);
-      return cl;
-    }
     cl.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -83,6 +79,8 @@ export function CloudDatacenter({
       }
     });
 
+    // Hologram twin outside the hover lens; the real model above shows inside it.
+    if (hologram) addHologramLayer(cl, hologram);
     return cl;
   }, [scene, hologram]);
 
@@ -144,8 +142,7 @@ export function CloudDatacenter({
       {/* Custom Blender Enterprise Cloud Datacenter 3D Model */}
       <primitive object={clonedScene} />
 
-      {/* Cinematic Lighting for Custom Isometric Datacenter Facility (unlit holograms don't need it) */}
-      {!hologram && <>
+      {/* Cinematic Lighting for Custom Isometric Datacenter Facility */}
       {/* 1. Primary Violet Aisle Point Light (Deep violet/purple datacenter corridor glow) */}
       <pointLight
         ref={aisleLightRef}
@@ -191,7 +188,6 @@ export function CloudDatacenter({
         decay={1.8}
         position={[1.8, 0.6, 4.5]}
       />
-      </>}
     </group>
   );
 }

@@ -9,7 +9,8 @@ import * as THREE from "three";
 import { simulationStore } from "@/lib/simulation/simulationState";
 import { SparseDeepSpaceStars } from "@/components/3d/SparseDeepSpaceStars";
 import { AdaptiveQuality, canvasQuality, useInView } from "@/lib/three/renderQuality";
-import { HOLOGRAM_SIMULATION, createHologramMaterial, createHologramScreenMaterial } from "@/lib/three/hologram";
+import { HOLOGRAM_SIMULATION, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
+import { HologramLens } from "@/lib/three/HologramLens";
 import { SimulationEdgeTelemetryOverlay, SimulationCloudTelemetryOverlay } from "@/components/simulation/SimulationTelemetryOverlays";
 
 type Target = "local" | "edge" | "cloud";
@@ -178,13 +179,6 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
     const clone = scene.clone(true);
     clone.traverse(child => {
       if (!(child instanceof THREE.Mesh)) return;
-      if (hologram) {
-        // The tablet screen keeps its live telemetry texture, projected in the tier colour.
-        child.material = screen && child.name.toLowerCase().includes("screen")
-          ? createHologramScreenMaterial(screen.texture, COLORS[target])
-          : hologram;
-        return;
-      }
       const copy = (original: THREE.Material) => {
         const mat = original.clone();
         if (mat instanceof THREE.MeshStandardMaterial) {
@@ -204,6 +198,8 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
       };
       child.material = Array.isArray(child.material) ? child.material.map(copy) : copy(child.material);
     });
+    // Hologram twin outside the hover lens; the tablet screen keeps its live telemetry texture.
+    if (hologram) addHologramLayer(clone, hologram, { screen: screen ? { map: screen.texture, color: COLORS[target] } : undefined });
     clone.rotation.set(...config.rotation);
     clone.updateWorldMatrix(true, true);
     const box = new THREE.Box3().setFromObject(clone);
@@ -361,6 +357,7 @@ export function SimulationSceneCanvas() {
     <Canvas orthographic camera={{ position: [0, VIEW_CENTER_Y, 12], near: .1, far: 100 }} frameloop={inView ? "always" : "never"}
       dpr={quality.dpr} gl={{ antialias: quality.antialias, alpha: true, powerPreference: "high-performance" }}>
       <AdaptiveQuality />
+      {HOLOGRAM_SIMULATION && <HologramLens radius={90} />}
       <FitCamera />
       <ambientLight intensity={1.1} />
       <directionalLight position={[2, 4, 6]} intensity={3} color="#e2e8f0" />
