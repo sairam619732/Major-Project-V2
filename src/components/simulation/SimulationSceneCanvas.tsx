@@ -8,23 +8,40 @@ import { Text, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { simulationStore } from "@/lib/simulation/simulationState";
 import { SparseDeepSpaceStars } from "@/components/3d/SparseDeepSpaceStars";
+import { SimulationEdgeTelemetryOverlay, SimulationCloudTelemetryOverlay } from "@/components/simulation/SimulationTelemetryOverlays";
 
 type Target = "local" | "edge" | "cloud";
 const COLORS = { local: "#38bdf8", edge: "#34d399", cloud: "#a78bfa" };
 const MODELS = {
   local: { url: "/assets/device/sci_fi_tablet.glb", position: [0, 2.05, 0], rotation: [1.72, 0, 0], size: 2.85 },
-  edge: { url: "/assets/edge/data_center_rack.glb", position: [-1.6, -1.25, 0], rotation: [0.12, -1.9, 0], size: 2.3 },
-  cloud: { url: "/assets/cloud/cloud_datacenter_clean.glb", position: [1.6, -1.25, 0], rotation: [0.3, -0.85, 0], size: 2.65 },
+  edge: { url: "/assets/edge/data_center_rack.glb", position: [-1, -1.25, 0], rotation: [0.12, -1.9, 0], size: 2.3 },
+  cloud: { url: "/assets/cloud/cloud_datacenter_clean.glb", position: [1, -1.25, 0], rotation: [0.3, -0.85, 0], size: 2.65 },
 } satisfies Record<Target, { url: string; position: [number, number, number]; rotation: [number, number, number]; size: number }>;
 const TASK = new THREE.Vector3(0, .25, .5);
 
 // World-space extent of the topology, including labels (tablet label at y=3, rack labels at y=-2.7).
 // Decrease these to increase visual scale (zoom in).
-const VIEW_WIDTH = 5.2;
+const VIEW_WIDTH = 7.6;
 const VIEW_HEIGHT = 6.6;
 const VIEW_CENTER_Y = 0.15;
 const pixelsPerUnitFor = (size: { width: number; height: number }) =>
   Math.min(size.width / VIEW_WIDTH, size.height / VIEW_HEIGHT);
+
+// Edge/cloud sit at ±spread on x (MODELS x is only the sign). Wide canvases get more spacing,
+// leaving room for the telemetry cards pinned beside each model.
+const MIN_SPREAD = 2.2;
+const MAX_SPREAD = 3.6;
+const EDGE_HALF_WIDTH = 0.75;
+const CLOUD_HALF_WIDTH = 1.4;
+const CARD_WIDTH_PX = 160;
+const CARD_GAP_PX = 20;
+
+function sceneLayout(size: { width: number; height: number }) {
+  const ppu = pixelsPerUnitFor(size);
+  if (!ppu) return { ppu, spread: MIN_SPREAD, showCards: false };
+  const room = size.width / ppu / 2 - CLOUD_HALF_WIDTH - (CARD_WIDTH_PX + CARD_GAP_PX + 12) / ppu;
+  return { ppu, spread: THREE.MathUtils.clamp(room, MIN_SPREAD, MAX_SPREAD), showCards: room >= MIN_SPREAD };
+}
 
 function FitCamera() {
   const { camera, size } = useThree();
@@ -136,8 +153,9 @@ function renderTabletCanvas(
 }
 
 
-function Candidate({ target }: { target: Target }) {
+function Candidate({ target, spread }: { target: Target; spread: number }) {
   const config = MODELS[target];
+  const x = Math.sign(config.position[0]) * spread;
   const { scene } = useGLTF(config.url);
   const group = useRef<THREE.Group>(null);
   const lastScreen = useRef("");
@@ -215,7 +233,7 @@ function Candidate({ target }: { target: Target }) {
     // Front-facing center of the actual world-space bounds: the line ends on the model.
     resources.anchor.z = resources.box.max.z;
     const positions = resources.geometry.attributes.position as THREE.BufferAttribute;
-    const edgeWaypoint = new THREE.Vector3(-1.6, -1.25, 0.4);
+    const edgeWaypoint = new THREE.Vector3(-spread, MODELS.edge.position[1], 0.4);
     if (target === "cloud") {
       positions.setXYZ(0, TASK.x, TASK.y, TASK.z);
       positions.setXYZ(1, edgeWaypoint.x, edgeWaypoint.y, edgeWaypoint.z);
@@ -272,11 +290,11 @@ function Candidate({ target }: { target: Target }) {
   return <>
     <primitive object={resources.line} />
     <points name={`simulation-signal-${target}`} geometry={resources.points} material={resources.signal} frustumCulled={false} />
-    <group ref={group} position={config.position} name={`simulation-${target}`}>
+    <group ref={group} position={[x, config.position[1], config.position[2]]} name={`simulation-${target}`}>
       <primitive object={model} dispose={null} />
       <pointLight color={COLORS[target]} position={[0, 1, 2]} intensity={3} distance={5} />
     </group>
-    <group position={[config.position[0], target === "local" ? 3 : -2.7, 0]}>
+    <group position={[x, target === "local" ? 3 : -2.7, 0]}>
       <Label color={COLORS[target]}>{target.toUpperCase()} {target === "local" ? "// DEVICE" : target === "edge" ? "// SERVER" : "// DATACENTER"}</Label>
     </group>
   </>;
@@ -300,8 +318,25 @@ function Task() {
   </group>;
 }
 
+
 export function SimulationSceneCanvas() {
-  return <div style={{ width: "100%", height: "100%", position: "relative" }}>
+  const container = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const el = container.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSize({ width, height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const { ppu, spread, showCards } = sceneLayout(size);
+  // Screen position of the model row, matching FitCamera's orthographic projection.
+  const cardTop = size.height / 2 - (MODELS.edge.position[1] - VIEW_CENTER_Y) * ppu;
+
+  return <div ref={container} style={{ width: "100%", height: "100%", position: "relative" }}>
     <Canvas orthographic camera={{ position: [0, VIEW_CENTER_Y, 12], near: .1, far: 100 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true }}>
       <FitCamera />
       <ambientLight intensity={1.1} />
@@ -310,9 +345,20 @@ export function SimulationSceneCanvas() {
       <SparseDeepSpaceStars />
       <Suspense fallback={null}>
         <Task />
-        <Candidate target="local" /><Candidate target="edge" /><Candidate target="cloud" />
+        <Candidate target="local" spread={spread} /><Candidate target="edge" spread={spread} /><Candidate target="cloud" spread={spread} />
       </Suspense>
     </Canvas>
+    {/* Cards sit beside their models when there is room, otherwise in the top corners. */}
+    {size.width >= 640 && <>
+      <div className={`absolute z-10 ${showCards ? "-translate-y-1/2" : "top-4 left-4"}`}
+        style={showCards ? { top: cardTop, left: size.width / 2 - (spread + EDGE_HALF_WIDTH) * ppu - CARD_GAP_PX - CARD_WIDTH_PX } : undefined}>
+        <SimulationEdgeTelemetryOverlay />
+      </div>
+      <div className={`absolute z-10 ${showCards ? "-translate-y-1/2" : "top-4 right-4"}`}
+        style={showCards ? { top: cardTop, left: size.width / 2 + (spread + CLOUD_HALF_WIDTH) * ppu + CARD_GAP_PX } : undefined}>
+        <SimulationCloudTelemetryOverlay />
+      </div>
+    </>}
   </div>;
 }
 
