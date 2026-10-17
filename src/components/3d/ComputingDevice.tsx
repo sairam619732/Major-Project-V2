@@ -1,11 +1,14 @@
 "use client";
 
+/* eslint-disable react-hooks/immutability -- R3F owns these mutable Three.js objects; frame callbacks update GPU resources without React renders. */
+
 import { useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { Group } from "three";
 import { scrollState } from "@/store/scrollStore";
+import { HOLOGRAM_LANDING, applyHologram, createHologramMaterial } from "@/lib/three/hologram";
 
 export function ComputingDevice() {
   const groupRef = useRef<Group>(null);
@@ -185,13 +188,21 @@ export function ComputingDevice() {
 
   const screenMatsRef = useRef<THREE.MeshStandardMaterial[]>([]);
   const emmisMatsRef = useRef<THREE.MeshStandardMaterial[]>([]);
+  const hologram = useMemo(() => (HOLOGRAM_LANDING ? createHologramMaterial("#38bdf8") : null), []);
 
   // Cloned scene configured with realistic PBR materials and glowing screen
-  const clonedScene = useMemo(() => {
+  const { clonedScene, holoScreens } = useMemo(() => {
     screenMatsRef.current = [];
     emmisMatsRef.current = [];
 
     const cl = scene.clone(true);
+    if (hologram) {
+      const holoScreens = applyHologram(cl, hologram, {
+        screen: screenTexture ? { map: screenTexture, color: "#7dd3fc" } : undefined,
+        detail: 0.35,
+      });
+      return { clonedScene: cl, holoScreens };
+    }
     cl.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -229,8 +240,8 @@ export function ComputingDevice() {
         }
       }
     });
-    return cl;
-  }, [scene, screenTexture]);
+    return { clonedScene: cl, holoScreens: [] };
+  }, [scene, screenTexture, hologram]);
 
   // Gentle idle breathing animation + continuous scroll-driven screen activation (Timeline: 0.28–0.58)
   useFrame((state) => {
@@ -266,6 +277,13 @@ export function ComputingDevice() {
     }
     for (let i = 0; i < emmisMatsRef.current.length; i++) {
       emmisMatsRef.current[i].emissiveIntensity = emmisIntensity;
+    }
+    if (hologram) {
+      hologram.uniforms.uTime.value = t;
+      hologram.uniforms.uIntensity.value = 0.7 + activeEased * 0.5;
+      for (let i = 0; i < holoScreens.length; i++) {
+        holoScreens[i].opacity = Math.min(1, screenIntensity / 2.2);
+      }
     }
   });
 

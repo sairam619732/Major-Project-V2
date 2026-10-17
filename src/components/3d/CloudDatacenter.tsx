@@ -1,11 +1,14 @@
 "use client";
 
+/* eslint-disable react-hooks/immutability -- R3F owns these mutable Three.js objects; frame callbacks update GPU resources without React renders. */
+
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { Group, PointLight } from "three";
 import { scrollState } from "@/store/scrollStore";
+import { HOLOGRAM_LANDING, applyHologram, createHologramMaterial } from "@/lib/three/hologram";
 
 interface CloudDatacenterProps {
   position?: [number, number, number];
@@ -24,6 +27,8 @@ export function CloudDatacenter({
 
   // References to emissive materials with their normalized baseline intensities
   const emmisItemsRef = useRef<EmissiveTrackItem[]>([]);
+  // Front faces only: the dense hall's stacked additive layers would otherwise blow out to white.
+  const hologram = useMemo(() => (HOLOGRAM_LANDING ? createHologramMaterial("#a78bfa", THREE.FrontSide) : null), []);
 
   // Load custom Blender Cloud datacenter asset
   const { scene } = useGLTF("/assets/cloud/cloud_datacenter_clean.glb");
@@ -39,6 +44,10 @@ export function CloudDatacenter({
     emmisItemsRef.current = [];
 
     const cl = scene.clone(true);
+    if (hologram) {
+      applyHologram(cl, hologram);
+      return cl;
+    }
     cl.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -75,7 +84,7 @@ export function CloudDatacenter({
     });
 
     return cl;
-  }, [scene]);
+  }, [scene, hologram]);
 
   useFrame((state) => {
     if (!groupRef.current) return;
@@ -113,6 +122,11 @@ export function CloudDatacenter({
       item.mat.emissiveIntensity = item.baseIntensity * pulseFactor * exitFade;
     }
 
+    if (hologram) {
+      hologram.uniforms.uTime.value = t;
+      hologram.uniforms.uIntensity.value = (0.75 + 0.35 * processingT + 0.08 * syncPulse * processingT) * exitFade;
+    }
+
     // Localized violet/indigo point light in the server aisle
     if (aisleLightRef.current) {
       aisleLightRef.current.intensity =
@@ -130,7 +144,8 @@ export function CloudDatacenter({
       {/* Custom Blender Enterprise Cloud Datacenter 3D Model */}
       <primitive object={clonedScene} />
 
-      {/* Cinematic Lighting for Custom Isometric Datacenter Facility */}
+      {/* Cinematic Lighting for Custom Isometric Datacenter Facility (unlit holograms don't need it) */}
+      {!hologram && <>
       {/* 1. Primary Violet Aisle Point Light (Deep violet/purple datacenter corridor glow) */}
       <pointLight
         ref={aisleLightRef}
@@ -176,6 +191,7 @@ export function CloudDatacenter({
         decay={1.8}
         position={[1.8, 0.6, 4.5]}
       />
+      </>}
     </group>
   );
 }
