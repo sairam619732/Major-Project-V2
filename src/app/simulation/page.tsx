@@ -8,7 +8,6 @@ import { SimulationConfig } from "@/components/simulation/SimulationConfig";
 import { SimulationTelemetryPanel } from "@/components/simulation/SimulationTelemetryPanel";
 import { SimulationResultsPanel } from "@/components/simulation/SimulationResultsPanel";
 import { SimulationDqnDecisionOverlay } from "@/components/simulation/SimulationDqnDecisionOverlay";
-import { SimulationEdgeTelemetryOverlay, SimulationCloudTelemetryOverlay } from "@/components/simulation/SimulationTelemetryOverlays";
 
 export default function SimulationPage() {
   return (
@@ -46,10 +45,6 @@ export default function SimulationPage() {
                 </div>
                 
                 <div className="h-[360px] sm:h-[450px] w-full relative">
-                   {/* Floating Telemetry Overlays inside 3D canvas */}
-                   <SimulationEdgeTelemetryOverlay />
-                   <SimulationCloudTelemetryOverlay />
-
                    <SimulationSceneCanvas />
                 </div>
              </div>
