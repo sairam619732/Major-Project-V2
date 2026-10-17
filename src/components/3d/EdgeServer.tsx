@@ -9,6 +9,7 @@ import * as THREE from "three";
 import type { Group, PointLight, MeshBasicMaterial } from "three";
 import { scrollState } from "@/store/scrollStore";
 import { HOLOGRAM_LANDING, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
+import { isLowEndDevice } from "@/lib/three/device";
 
 interface EdgeServerProps {
   position?: [number, number, number];
@@ -23,7 +24,8 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
 
   // References to emissive materials for synchronized processing pulse
   const emmisMatsRef = useRef<THREE.MeshStandardMaterial[]>([]);
-  const hologram = useMemo(() => (HOLOGRAM_LANDING ? createHologramMaterial("#34d399") : null), []);
+  const hologram = useMemo(() => (HOLOGRAM_LANDING ? createHologramMaterial("#34d399", THREE.DoubleSide, true) : null), []);
+  const lightRig = !hologram || !isLowEndDevice();
 
   // Safe R3F model loading using the user's authentic Edge 3D GLB asset
   const { scene } = useGLTF("/assets/edge/data_center_rack.glb");
@@ -117,7 +119,7 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
     });
 
     // Hologram twin outside the hover lens; the real model above shows inside it.
-    if (hologram) addHologramLayer(cl, hologram, { detail: 0.9 });
+    if (hologram) addHologramLayer(cl, hologram, { detail: 0.9, reveal: true });
     return cl;
   }, [scene, hologram]);
 
@@ -203,54 +205,58 @@ export function EdgeServer({ position = [8.2, 0.0, -1.0] }: EdgeServerProps) {
         </mesh>
       )}
 
-      {/* Cinematic Lighting for Edge Computing Pod */}
-      {/* 1. Primary Central Processing Light in front of rack blades (+X local face) */}
-      <pointLight
-        ref={pointLightRef}
-        color="#10f08e"
-        intensity={3.6}
-        distance={4.8}
-        decay={2.0}
-        position={[0.60, 0.15, 0.0]}
-      />
+      {/* Cinematic Lighting for Edge Computing Pod (with holograms only the hover reveal uses it; skipped on low-end) */}
+      {lightRig && (
+        <>
+          {/* 1. Primary Central Processing Light in front of rack blades (+X local face) */}
+          <pointLight
+            ref={pointLightRef}
+            color="#10f08e"
+            intensity={3.6}
+            distance={4.8}
+            decay={2.0}
+            position={[0.60, 0.15, 0.0]}
+          />
 
-      {/* 2. Upper Rack Module Accent Spill */}
-      <pointLight
-        ref={upperLightRef}
-        color="#05df72"
-        intensity={1.8}
-        distance={3.5}
-        decay={2.0}
-        position={[0.55, 0.70, 0.0]}
-      />
+          {/* 2. Upper Rack Module Accent Spill */}
+          <pointLight
+            ref={upperLightRef}
+            color="#05df72"
+            intensity={1.8}
+            distance={3.5}
+            decay={2.0}
+            position={[0.55, 0.70, 0.0]}
+          />
 
-      {/* 3. Lower Rack Module Accent Spill */}
-      <pointLight
-        ref={lowerLightRef}
-        color="#10b981"
-        intensity={1.5}
-        distance={3.2}
-        decay={2.0}
-        position={[0.55, -0.60, 0.0]}
-      />
+          {/* 3. Lower Rack Module Accent Spill */}
+          <pointLight
+            ref={lowerLightRef}
+            color="#10b981"
+            intensity={1.5}
+            distance={3.2}
+            decay={2.0}
+            position={[0.55, -0.60, 0.0]}
+          />
 
-      {/* 4. Soft Cyan Rim Accent (-X local rear / top) */}
-      <pointLight
-        color="#06b6d4"
-        intensity={2.6}
-        distance={5.0}
-        decay={1.8}
-        position={[-0.9, 1.1, 0.0]}
-      />
+          {/* 4. Soft Cyan Rim Accent (-X local rear / top) */}
+          <pointLight
+            color="#06b6d4"
+            intensity={2.6}
+            distance={5.0}
+            decay={1.8}
+            position={[-0.9, 1.1, 0.0]}
+          />
 
-      {/* 5. Soft Front Key Light for dark metallic chassis highlights */}
-      <pointLight
-        color="#f1f5f9"
-        intensity={1.8}
-        distance={6.0}
-        decay={1.8}
-        position={[1.8, 0.8, -0.6]}
-      />
+          {/* 5. Soft Front Key Light for dark metallic chassis highlights */}
+          <pointLight
+            color="#f1f5f9"
+            intensity={1.8}
+            distance={6.0}
+            decay={1.8}
+            position={[1.8, 0.8, -0.6]}
+          />
+        </>
+      )}
     </group>
   );
 }

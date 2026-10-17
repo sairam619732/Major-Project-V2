@@ -10,7 +10,6 @@ import { simulationStore } from "@/lib/simulation/simulationState";
 import { SparseDeepSpaceStars } from "@/components/3d/SparseDeepSpaceStars";
 import { AdaptiveQuality, canvasQuality, useInView } from "@/lib/three/renderQuality";
 import { HOLOGRAM_SIMULATION, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
-import { HologramLens } from "@/lib/three/HologramLens";
 import { SimulationEdgeTelemetryOverlay, SimulationCloudTelemetryOverlay } from "@/components/simulation/SimulationTelemetryOverlays";
 
 type Target = "local" | "edge" | "cloud";
@@ -198,7 +197,7 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
       };
       child.material = Array.isArray(child.material) ? child.material.map(copy) : copy(child.material);
     });
-    // Hologram twin outside the hover lens; the tablet screen keeps its live telemetry texture.
+    // Pure hologram (no hover reveal here); the tablet screen keeps its live telemetry texture.
     if (hologram) addHologramLayer(clone, hologram, { screen: screen ? { map: screen.texture, color: COLORS[target] } : undefined });
     clone.rotation.set(...config.rotation);
     clone.updateWorldMatrix(true, true);
@@ -306,7 +305,7 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
     <points name={`simulation-signal-${target}`} geometry={resources.points} material={resources.signal} frustumCulled={false} />
     <group ref={group} position={[x, config.position[1], config.position[2]]} name={`simulation-${target}`}>
       <primitive object={model} dispose={null} />
-      <pointLight color={COLORS[target]} position={[0, 1, 2]} intensity={3} distance={5} />
+      {!hologram && <pointLight color={COLORS[target]} position={[0, 1, 2]} intensity={3} distance={5} />}
     </group>
     <group position={[x, target === "local" ? 3 : -2.7, 0]}>
       <Label color={COLORS[target]}>{target.toUpperCase()} {target === "local" ? "// DEVICE" : target === "edge" ? "// SERVER" : "// DATACENTER"}</Label>
@@ -354,10 +353,9 @@ export function SimulationSceneCanvas() {
   const cardTop = size.height / 2 - (MODELS.edge.position[1] - VIEW_CENTER_Y) * ppu;
 
   return <div ref={container} style={{ width: "100%", height: "100%", position: "relative" }}>
-    <Canvas orthographic camera={{ position: [0, VIEW_CENTER_Y, 12], near: .1, far: 100 }} frameloop={inView ? "always" : "never"}
+    <Canvas orthographic camera={{ position: [0, VIEW_CENTER_Y, 12], near: .1, far: 100 }} frameloop={inView ? quality.frameloop : "never"}
       dpr={quality.dpr} gl={{ antialias: quality.antialias, alpha: true, powerPreference: "high-performance" }}>
       <AdaptiveQuality />
-      {HOLOGRAM_SIMULATION && <HologramLens radius={90} />}
       <FitCamera />
       <ambientLight intensity={1.1} />
       <directionalLight position={[2, 4, 6]} intensity={3} color="#e2e8f0" />

@@ -4,53 +4,44 @@ import { useEffect, useState, type RefObject } from "react";
 import { useThree } from "@react-three/fiber";
 import { PerformanceMonitor } from "@react-three/drei";
 import * as THREE from "three";
+import { isLowEndDevice } from "./device";
 
-// Integrated / software GPUs that struggle with full-resolution PBR scenes.
-const WEAK_GPU = /swiftshader|llvmpipe|software|basic render|intel.*\b(hd|uhd)\b|mali-[gt]?[0-9]{1,2}\b|adreno.*\b[1-5][0-9]{2}\b/i;
+export { isLowEndDevice };
 
-let cachedLowEnd: boolean | null = null;
+/** Frame rate low-end devices render at (halves GPU work vs 60 Hz). */
+const LOW_END_FPS = 30;
 
-/** Best-effort, client-only check for "potato" hardware. Cached after the first call. */
-export function isLowEndDevice(): boolean {
-  if (cachedLowEnd !== null) return cachedLowEnd;
-  if (typeof window === "undefined") return false;
-
-  const nav = navigator as Navigator & { deviceMemory?: number };
-  let lowEnd = (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4;
-
-  if (!lowEnd) {
-    try {
-      const gl = document.createElement("canvas").getContext("webgl");
-      const info = gl?.getExtension("WEBGL_debug_renderer_info");
-      const renderer = info && gl ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
-      lowEnd = WEAK_GPU.test(renderer);
-      gl?.getExtension("WEBGL_lose_context")?.loseContext();
-    } catch {
-      // Detection is a hint only; keep defaults if WebGL probing fails.
-    }
-  }
-
-  cachedLowEnd = lowEnd;
-  return lowEnd;
-}
-
-/** Initial <Canvas> settings: capped DPR everywhere, no MSAA on weak GPUs. */
+/**
+ * Initial <Canvas> settings: capped DPR everywhere, no MSAA on weak GPUs, and on-demand frames on
+ * weak GPUs so <AdaptiveQuality /> can cap the frame rate.
+ */
 export function canvasQuality() {
   const lowEnd = isLowEndDevice();
   return {
     lowEnd,
     dpr: (lowEnd ? [0.75, 1] : [1, 1.5]) as [number, number],
     antialias: !lowEnd,
+    frameloop: (lowEnd ? "demand" : "always") as "demand" | "always",
   };
 }
 
 /**
- * Drop-in child of <Canvas>: lowers the render resolution while the frame rate is poor and
- * raises it again when there is headroom. Settles at the minimum if quality keeps flip-flopping.
+ * Drop-in child of <Canvas>: lowers the render resolution while the frame rate is poor and raises it
+ * again when there is headroom (settling at the minimum if it keeps flip-flopping). On low-end
+ * devices it also drives the canvas at a fixed 30 FPS; give the canvas `frameloop={quality.frameloop}`.
  */
 export function AdaptiveQuality() {
   const setDpr = useThree((s) => s.setDpr);
+  const invalidate = useThree((s) => s.invalidate);
+  const frameloop = useThree((s) => s.frameloop);
   const [min, max] = canvasQuality().dpr;
+
+  useEffect(() => {
+    if (frameloop !== "demand") return;
+    const id = window.setInterval(() => invalidate(), 1000 / LOW_END_FPS);
+    return () => window.clearInterval(id);
+  }, [frameloop, invalidate]);
+
   return (
     <PerformanceMonitor
       flipflops={3}

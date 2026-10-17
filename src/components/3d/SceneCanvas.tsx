@@ -34,6 +34,7 @@ export function SceneCanvas() {
       <Canvas
         camera={{ position: [0, 0, 7.2], fov: 36 }}
         dpr={quality.dpr}
+        frameloop={quality.frameloop}
         gl={{
           antialias: quality.antialias,
           powerPreference: "high-performance",
@@ -42,7 +43,8 @@ export function SceneCanvas() {
         }}
       >
         <AdaptiveQuality />
-        {HOLOGRAM_LANDING && <HologramLens radius={150} />}
+        {/* The hover reveal draws a second, real copy of each model; skip it on weak hardware. */}
+        {HOLOGRAM_LANDING && !quality.lowEnd && <HologramLens radiusFraction={0.6} />}
 
         {/* Deep navy-black background */}
         <color attach="background" args={["#02040A"]} />

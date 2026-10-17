@@ -6,11 +6,12 @@ import * as THREE from "three";
 import { REAL_MODEL_LAYER, hologramLens } from "./hologram";
 
 /**
- * Child of <Canvas>: opens the hologram scanner lens around the pointer while it is over the canvas.
+ * Child of <Canvas>: opens the hover-reveal spotlight around the pointer while it is over the canvas.
  * Works even when the canvas itself has pointer-events: none (listens on window).
- * `radius` is in CSS pixels.
+ * The reveal's size (where it has faded to nothing) is `radiusFraction` of the canvas height, or a
+ * fixed `radius` in CSS pixels. The spotlight trails the pointer slightly for a fluid feel.
  */
-export function HologramLens({ radius = 140 }: { radius?: number }) {
+export function HologramLens({ radius = 200, radiusFraction }: { radius?: number; radiusFraction?: number }) {
   const gl = useThree((s) => s.gl);
   const camera = useThree((s) => s.camera);
   const pointer = useRef({ x: 0, y: 0, active: false });
@@ -43,10 +44,17 @@ export function HologramLens({ radius = 140 }: { radius?: number }) {
     const rect = gl.domElement.getBoundingClientRect();
     const { x, y, active } = pointer.current;
     // gl_FragCoord space: drawing-buffer pixels with the origin at the bottom-left.
-    hologramLens.uLensCenter.value.set((x - rect.left) * dpr, (rect.bottom - y) * dpr);
-    const target = active ? radius * dpr : 0;
-    const current = THREE.MathUtils.damp(hologramLens.uLensRadius.value, target, 10, delta);
+    const tx = (x - rect.left) * dpr;
+    const ty = (rect.bottom - y) * dpr;
+    const center = hologramLens.uLensCenter.value;
+    if (hologramLens.uLensRadius.value === 0) center.set(tx, ty);
+    else center.set(THREE.MathUtils.damp(center.x, tx, 14, delta), THREE.MathUtils.damp(center.y, ty, 14, delta));
+
+    const cssRadius = radiusFraction ? rect.height * radiusFraction : radius;
+    const target = active ? cssRadius * dpr : 0;
+    const current = THREE.MathUtils.damp(hologramLens.uLensRadius.value, target, 8, delta);
     hologramLens.uLensRadius.value = current < 0.5 ? 0 : current;
+    hologramLens.uLensTime.value += delta;
 
     // Only render the real-model copies while the lens is open.
     if (hologramLens.uLensRadius.value > 0) camera.layers.enable(REAL_MODEL_LAYER);

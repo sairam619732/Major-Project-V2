@@ -239,7 +239,7 @@ export function DecisionVisualization() {
       }
     });
 
-    // Hologram twin outside the hover lens; the real model above shows inside it.
+    // Pure hologram here (the hover reveal is only on the opening sections).
     const holoScreens = holo
       ? addHologramLayer(cl, holo.local, {
           screen: tabletScreenTexture ? { map: tabletScreenTexture, color: "#fcd34d" } : undefined,
@@ -768,13 +768,15 @@ export function DecisionVisualization() {
         <group rotation={[Math.PI / 2, 0, 0]}>
           <primitive object={clonedTablet} />
         </group>
-        <pointLight
-          ref={localLightRef}
-          color="#f59e0b"
-          distance={3.2}
-          intensity={0.6}
-          position={[0, 0.1, 0.4]}
-        />
+        {!holo && (
+          <pointLight
+            ref={localLightRef}
+            color="#f59e0b"
+            distance={3.2}
+            intensity={0.6}
+            position={[0, 0.1, 0.4]}
+          />
+        )}
       </group>
 
       {/* ==================================================
@@ -787,19 +789,23 @@ export function DecisionVisualization() {
         rotation={[0.08, -1.75, 0.0]}
       >
         <primitive object={clonedEdge} position={[0, -1.157, 0]} />
-        <pointLight
-          ref={edgePulseLightRef}
-          color="#10f08e"
-          distance={4.8}
-          intensity={2.8}
-          position={[0.60, 0.15, 0.0]}
-        />
-        <pointLight
-          color="#05df72"
-          distance={3.5}
-          intensity={1.8}
-          position={[0.55, 0.70, 0.0]}
-        />
+        {!holo && (
+          <>
+            <pointLight
+              ref={edgePulseLightRef}
+              color="#10f08e"
+              distance={4.8}
+              intensity={2.8}
+              position={[0.60, 0.15, 0.0]}
+            />
+            <pointLight
+              color="#05df72"
+              distance={3.5}
+              intensity={1.8}
+              position={[0.55, 0.70, 0.0]}
+            />
+          </>
+        )}
       </group>
 
       {/* Selection Halo Ring at Server Base */}
@@ -820,13 +826,15 @@ export function DecisionVisualization() {
         rotation={[0.03, -1.15, 0.0]}
       >
         <primitive object={clonedCloud} />
-        <pointLight
-          ref={cloudLightRef}
-          color="#8b5cf6"
-          distance={3.4}
-          intensity={0.7}
-          position={[0, 1.4, 0]}
-        />
+        {!holo && (
+          <pointLight
+            ref={cloudLightRef}
+            color="#8b5cf6"
+            distance={3.4}
+            intensity={0.7}
+            position={[0, 1.4, 0]}
+          />
+        )}
       </group>
     </group>
   );

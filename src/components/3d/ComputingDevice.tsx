@@ -188,7 +188,7 @@ export function ComputingDevice() {
 
   const screenMatsRef = useRef<THREE.MeshStandardMaterial[]>([]);
   const emmisMatsRef = useRef<THREE.MeshStandardMaterial[]>([]);
-  const hologram = useMemo(() => (HOLOGRAM_LANDING ? createHologramMaterial("#38bdf8") : null), []);
+  const hologram = useMemo(() => (HOLOGRAM_LANDING ? createHologramMaterial("#38bdf8", THREE.DoubleSide, true) : null), []);
 
   // Cloned scene configured with realistic PBR materials and glowing screen
   const { clonedScene, holoScreens } = useMemo(() => {
@@ -238,6 +238,7 @@ export function ComputingDevice() {
       ? addHologramLayer(cl, hologram, {
           screen: screenTexture ? { map: screenTexture, color: "#7dd3fc" } : undefined,
           detail: 0.35,
+          reveal: true,
         })
       : [];
     return { clonedScene: cl, holoScreens };

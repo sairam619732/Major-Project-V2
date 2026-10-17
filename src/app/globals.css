@@ -305,3 +305,12 @@ input[type="range"].tech-slider::-moz-range-thumb {
     box-shadow: 0 0 30px -2px rgba(34, 211, 238, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
 }
+
+/* Low-end devices (html.low-end, set by <PerformanceMode />): backdrop blur over the live WebGL
+   canvas is recomputed every frame, so drop it. */
+html.low-end *,
+html.low-end *::before,
+html.low-end *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}

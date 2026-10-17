@@ -1,16 +1,21 @@
 import * as THREE from "three";
+import { isLowEndDevice } from "./device";
 
 // Render the models as tinted holograms. Set a flag to false to restore the original PBR shading.
 export const HOLOGRAM_SIMULATION = true; // /simulation topology panel
 export const HOLOGRAM_LANDING = true; // scroll-story models on the landing page
 
 /**
- * Scanner lens: inside a circle around the pointer the real (PBR) model shows through the hologram.
+ * Hover reveal: a soft, organically shaped spotlight around the pointer where the real (PBR) model
+ * shows through the hologram, strongest at the cursor and fading gradually to nothing at its slowly
+ * morphing outline (no circle, no visible edge).
+ * Only materials created with `reveal: true` respond to it; the rest stay pure holograms.
  * Center/radius are in drawing-buffer pixels (gl_FragCoord space) and are driven by <HologramLens />.
  */
 export const hologramLens = {
   uLensCenter: { value: new THREE.Vector2(-1e5, -1e5) },
   uLensRadius: { value: 0 },
+  uLensTime: { value: 0 },
 };
 
 /**
@@ -18,6 +23,22 @@ export const hologramLens = {
  * so the PBR copies cost nothing when nobody is hovering.
  */
 export const REAL_MODEL_LAYER = 1;
+
+
+// Real-model weight of the hover spotlight: 1 at the cursor, easing gradually to 0 at an organic
+// outline. A few drifting angular waves bend the radius so the shape is a soft, morphing blob.
+const REVEAL_GLSL = /* glsl */ `
+  float revealWeight(vec2 fragCoord, vec2 center, float radius, float time) {
+    if (radius < 1.0) return 0.0;
+    vec2 d = fragCoord - center;
+    float a = atan(d.y, d.x);
+    float shape = 1.0
+      + 0.16 * sin(3.0 * a + time * 0.7)
+      + 0.10 * sin(5.0 * a - time * 1.1)
+      + 0.06 * sin(8.0 * a + time * 1.7);
+    return 1.0 - smoothstep(0.0, radius * shape, length(d));
+  }
+`;
 
 const VERTEX = /* glsl */ `
   varying vec2 vUv;
@@ -49,14 +70,16 @@ const FRAGMENT = /* glsl */ `
   uniform sampler2D uMap;
   uniform vec2 uLensCenter;
   uniform float uLensRadius;
+  uniform float uLensTime;
   varying vec2 vUv;
   varying vec3 vNormal;
   varying vec3 vViewPos;
   varying float vWorldY;
+  ${REVEAL_GLSL}
   void main() {
-    // Inside the scanner lens the real model is drawn instead.
-    float lensDist = distance(gl_FragCoord.xy, uLensCenter);
-    if (lensDist < uLensRadius) discard;
+    // The hover spotlight shows the real model instead; the hologram fades out where it does.
+    float reveal = revealWeight(gl_FragCoord.xy, uLensCenter, uLensRadius, uLensTime);
+    if (reveal > 0.999) discard;
 
     vec3 n = normalize(vNormal);
     vec3 viewDir = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(-vViewPos);
@@ -72,9 +95,10 @@ const FRAGMENT = /* glsl */ `
       base += uDetail * dot(texture2D(uMap, vUv).rgb, vec3(0.299, 0.587, 0.114));
     #endif
     float glow = base * scan * flicker * uIntensity;
-    // Bright ring where the lens cuts through the hologram.
-    float lensRim = step(1.0, uLensRadius) * (1.0 - smoothstep(0.0, 12.0, lensDist - uLensRadius));
-    gl_FragColor = vec4(uColor * (glow + 1.6 * lensRim * uIntensity), 1.0);
+    gl_FragColor = vec4(uColor * glow * (1.0 - reveal), 1.0);
+    // Inside the spotlight, ignore the opaque real model's depth so every hologram layer fades
+    // evenly; otherwise the layers behind its front surface vanish and leave a visible edge.
+    gl_FragDepth = reveal > 0.0 ? 0.0 : gl_FragCoord.z;
   }
 `;
 
@@ -87,6 +111,7 @@ export type HologramMaterial = THREE.ShaderMaterial & {
     uMap: { value: THREE.Texture | null };
     uLensCenter: { value: THREE.Vector2 };
     uLensRadius: { value: number };
+    uLensTime: { value: number };
   };
 };
 
@@ -94,8 +119,14 @@ export type HologramMaterial = THREE.ShaderMaterial & {
  * Unlit additive hologram: fresnel rim, crease outlines, scanlines, scan sweep and a faint flicker.
  * Drive `uniforms.uTime` each frame and `uniforms.uIntensity` for emphasis.
  * Use FrontSide for dense models, otherwise stacked additive layers blow out to white.
+ * With `reveal`, the material follows the shared hover spotlight; otherwise it ignores it.
+ * Low-end devices always get FrontSide to roughly halve the additive overdraw.
  */
-export function createHologramMaterial(color: THREE.ColorRepresentation, side: THREE.Side = THREE.DoubleSide) {
+export function createHologramMaterial(
+  color: THREE.ColorRepresentation,
+  side: THREE.Side = THREE.DoubleSide,
+  reveal = false,
+) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(color) },
@@ -103,37 +134,57 @@ export function createHologramMaterial(color: THREE.ColorRepresentation, side: T
       uIntensity: { value: 1 },
       uDetail: { value: 0 },
       uMap: { value: null },
-      ...hologramLens,
+      ...(reveal ? hologramLens : { uLensCenter: { value: new THREE.Vector2(-1e5, -1e5) }, uLensRadius: { value: 0 }, uLensTime: { value: 0 } }),
     },
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    side,
+    side: isLowEndDevice() ? THREE.FrontSide : side,
     toneMapped: false,
   }) as HologramMaterial;
 }
 
-/** Make a built-in material draw only inside (`"inside"`) or outside (`"outside"`) the scanner lens. */
+/**
+ * Weight a built-in material by the hover spotlight: `"inside"` shows it only in the spotlight,
+ * `"outside"` only outside it, cross-fading smoothly.
+ *
+ * Inside (real models) stays opaque and fades its colour to black: fading alpha instead would let
+ * stacked layers of dense models (racks behind racks) add back up to opaque and leave a hard edge.
+ * Against the dark scene black reads as empty while the additive hologram fades in on top.
+ * Outside (additive hologram screens) fades alpha, which scales additive light directly.
+ */
 function clipToLens(material: THREE.Material, keep: "inside" | "outside") {
-  const test = keep === "inside" ? ">" : "<";
+  const weight =
+    keep === "inside"
+      ? `float lensWeight = revealWeight(gl_FragCoord.xy, uLensCenter, uLensRadius, uLensTime);
+  if (lensWeight <= 0.0) discard;`
+      : `float lensWeight = 1.0 - revealWeight(gl_FragCoord.xy, uLensCenter, uLensRadius, uLensTime);
+  if (lensWeight <= 0.001) discard;`;
+  const apply = keep === "inside" ? "gl_FragColor.rgb *= lensWeight;" : "gl_FragColor.a *= lensWeight;";
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uLensCenter = hologramLens.uLensCenter;
     shader.uniforms.uLensRadius = hologramLens.uLensRadius;
+    shader.uniforms.uLensTime = hologramLens.uLensTime;
     shader.fragmentShader =
-      "uniform vec2 uLensCenter;\nuniform float uLensRadius;\n" +
-      shader.fragmentShader.replace(
-        "void main() {",
-        `void main() {\n  if (distance(gl_FragCoord.xy, uLensCenter) ${test} uLensRadius) discard;`,
-      );
+      `uniform vec2 uLensCenter;
+uniform float uLensRadius;
+uniform float uLensTime;
+${REVEAL_GLSL}
+` +
+      shader.fragmentShader
+        .replace("void main() {", `void main() {
+  ${weight}`)
+        .replace("#include <dithering_fragment>", `#include <dithering_fragment>
+  ${apply}`);
   };
-  material.customProgramCacheKey = () => `hologram-lens-${keep}`;
+  material.customProgramCacheKey = () => `hologram-reveal-${keep}`;
   material.needsUpdate = true;
 }
 
 /** A screen surface that keeps its texture but projects it as additive light in the hologram colour. */
-export function createHologramScreenMaterial(map: THREE.Texture, color: THREE.ColorRepresentation) {
+export function createHologramScreenMaterial(map: THREE.Texture, color: THREE.ColorRepresentation, reveal = false) {
   const material = new THREE.MeshBasicMaterial({
     map,
     color,
@@ -143,13 +194,17 @@ export function createHologramScreenMaterial(map: THREE.Texture, color: THREE.Co
     depthWrite: false,
     toneMapped: false,
   });
-  clipToLens(material, "outside");
+  if (reveal) clipToLens(material, "outside");
   return material;
 }
 
 /**
- * Give every mesh under `root` a hologram twin. The original (already configured PBR) meshes move to
- * REAL_MODEL_LAYER and are clipped to the scanner lens; the hologram twins draw everywhere else.
+ * Render every mesh under `root` as a hologram.
+ *
+ * Without `reveal`, the meshes' materials are simply replaced. With `reveal`, each mesh instead gets
+ * a hologram twin: the original (already configured PBR) mesh moves to REAL_MODEL_LAYER and shows
+ * only in the hover spotlight, where the twin fades out. `hologram` must then be created with
+ * `reveal` too.
  *
  * Meshes whose name contains "screen" get a textured hologram screen when `screen` is given. With
  * `detail` > 0, meshes whose original material has a (emissive) texture get a hologram variant that
@@ -159,9 +214,11 @@ export function createHologramScreenMaterial(map: THREE.Texture, color: THREE.Co
 export function addHologramLayer(
   root: THREE.Object3D,
   hologram: HologramMaterial,
-  options: { screen?: { map: THREE.Texture; color: THREE.ColorRepresentation }; detail?: number } = {},
+  options: { screen?: { map: THREE.Texture; color: THREE.ColorRepresentation }; detail?: number; reveal?: boolean } = {},
 ) {
   const { screen, detail = 0 } = options;
+  // Low-end devices get no hover reveal (<SceneCanvas> skips <HologramLens />), so skip the real-model twins too.
+  const reveal = (options.reveal ?? false) && !isLowEndDevice();
   const screens: THREE.MeshBasicMaterial[] = [];
   const variants = new Map<string, THREE.ShaderMaterial>();
   const variantFor = (original: THREE.Material | THREE.Material[]) => {
@@ -187,17 +244,23 @@ export function addHologramLayer(
   for (const mesh of meshes) {
     mesh.castShadow = false;
     mesh.receiveShadow = false;
-    (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => clipToLens(m, "inside"));
-    mesh.layers.set(REAL_MODEL_LAYER);
 
     let material: THREE.Material;
     if (screen && mesh.name.toLowerCase().includes("screen")) {
-      const screenMaterial = createHologramScreenMaterial(screen.map, screen.color);
+      const screenMaterial = createHologramScreenMaterial(screen.map, screen.color, reveal);
       screens.push(screenMaterial);
       material = screenMaterial;
     } else {
       material = variantFor(mesh.material);
     }
+
+    if (!reveal) {
+      mesh.material = material;
+      continue;
+    }
+
+    (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => clipToLens(m, "inside"));
+    mesh.layers.set(REAL_MODEL_LAYER);
 
     const source = mesh as THREE.InstancedMesh;
     const twin = source.isInstancedMesh

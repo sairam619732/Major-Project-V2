@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { SimulationTransition } from "@/components/transitions/SimulationTransition";
+import { PerformanceMode } from "@/lib/three/PerformanceMode";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,6 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable}`}>
       <body className="min-h-screen bg-[#02040A] text-slate-100 antialiased selection:bg-cyan-500/20 selection:text-cyan-300">
+        <PerformanceMode />
         {children}
         {/* Phase 11.3: Dedicated Reusable Cinematic Signal Transition Overlay */}
         <SimulationTransition />

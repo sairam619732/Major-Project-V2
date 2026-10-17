@@ -11,6 +11,13 @@ import {
   DEFAULT_CLOUD,
 } from "@/lib/offloading/decisionEngine";
 import { transitionStore } from "@/lib/transition/transitionStore";
+import { isLowEndDevice } from "@/lib/three/device";
+
+// Scroll-driven text blur. `blur(0px)` still forces a filter layer over the live canvas, so use
+// `none` once it has settled; low-end devices skip the blur entirely.
+function blurFilter(px: number) {
+  return px < 0.05 || isLowEndDevice() ? "none" : `blur(${px.toFixed(1)}px)`;
+}
 
 function smoothstep(min: number, max: number, value: number) {
   const x = Math.max(0, Math.min(1, (value - min) / (max - min)));
@@ -88,7 +95,7 @@ export function StorySections() {
 
         heroContentRef.current.style.opacity = heroOpacity.toFixed(3);
         heroContentRef.current.style.transform = `translate3d(0, ${heroY.toFixed(1)}px, 0)`;
-        heroContentRef.current.style.filter = `blur(${heroBlur.toFixed(1)}px)`;
+        heroContentRef.current.style.filter = blurFilter(heroBlur);
         heroContentRef.current.style.pointerEvents = heroOpacity > 0.1 ? "auto" : "none";
       }
 
@@ -110,7 +117,7 @@ export function StorySections() {
 
         localTitleRef.current.style.opacity = titleOpacity.toFixed(3);
         localTitleRef.current.style.transform = `translate3d(0, ${titleY.toFixed(1)}px, 0)`;
-        localTitleRef.current.style.filter = `blur(${titleBlur.toFixed(1)}px)`;
+        localTitleRef.current.style.filter = blurFilter(titleBlur);
       }
 
       // 2B. LOCAL DESCRIPTION (0.20 -> 0.32)
@@ -122,7 +129,7 @@ export function StorySections() {
 
         localDescRef.current.style.opacity = descOpacity.toFixed(3);
         localDescRef.current.style.transform = `translate3d(0, ${descY.toFixed(1)}px, 0)`;
-        localDescRef.current.style.filter = `blur(${descBlur.toFixed(1)}px)`;
+        localDescRef.current.style.filter = blurFilter(descBlur);
       }
 
       // 2C. LOCAL TELEMETRY BLOCK (0.30 -> 0.40)
@@ -134,7 +141,7 @@ export function StorySections() {
 
         localTeleRef.current.style.opacity = teleOpacity.toFixed(3);
         localTeleRef.current.style.transform = `translate3d(0, ${teleY.toFixed(1)}px, 0)`;
-        localTeleRef.current.style.filter = `blur(${teleBlur.toFixed(1)}px)`;
+        localTeleRef.current.style.filter = blurFilter(teleBlur);
       }
 
       // 3. EDGE CONTENT (Reveals 0.54 -> 0.66, exits as task leaves for Cloud 0.72 -> 0.80)
@@ -155,7 +162,7 @@ export function StorySections() {
 
         edgeTitleRef.current.style.opacity = edgeOpacity.toFixed(3);
         edgeTitleRef.current.style.transform = `translate3d(0, ${edgeTitleY.toFixed(1)}px, 0)`;
-        edgeTitleRef.current.style.filter = `blur(${edgeTitleBlur.toFixed(1)}px)`;
+        edgeTitleRef.current.style.filter = blurFilter(edgeTitleBlur);
       }
 
       // 3B. EDGE DESCRIPTION (0.56 -> 0.64)
@@ -167,7 +174,7 @@ export function StorySections() {
 
         edgeDescRef.current.style.opacity = edgeDescOpacity.toFixed(3);
         edgeDescRef.current.style.transform = `translate3d(0, ${edgeDescY.toFixed(1)}px, 0)`;
-        edgeDescRef.current.style.filter = `blur(${edgeDescBlur.toFixed(1)}px)`;
+        edgeDescRef.current.style.filter = blurFilter(edgeDescBlur);
       }
 
       // 3C. EDGE TELEMETRY BLOCK (0.58 -> 0.66)
@@ -179,7 +186,7 @@ export function StorySections() {
 
         edgeTeleRef.current.style.opacity = edgeTeleOpacity.toFixed(3);
         edgeTeleRef.current.style.transform = `translate3d(0, ${edgeTeleY.toFixed(1)}px, 0)`;
-        edgeTeleRef.current.style.filter = `blur(${edgeTeleBlur.toFixed(1)}px)`;
+        edgeTeleRef.current.style.filter = blurFilter(edgeTeleBlur);
       }
 
       // 4. CLOUD CONTENT (Reveals 0.84 -> 0.96, exits 1.00 -> 1.08 as scroll enters Decision)
@@ -200,7 +207,7 @@ export function StorySections() {
 
         cloudTitleRef.current.style.opacity = cloudOpacity.toFixed(3);
         cloudTitleRef.current.style.transform = `translate3d(0, ${cloudTitleY.toFixed(1)}px, 0)`;
-        cloudTitleRef.current.style.filter = `blur(${cloudTitleBlur.toFixed(1)}px)`;
+        cloudTitleRef.current.style.filter = blurFilter(cloudTitleBlur);
       }
 
       // 4B. CLOUD DESCRIPTION (0.86 -> 0.94)
@@ -212,7 +219,7 @@ export function StorySections() {
 
         cloudDescRef.current.style.opacity = cloudDescOpacity.toFixed(3);
         cloudDescRef.current.style.transform = `translate3d(0, ${cloudDescY.toFixed(1)}px, 0)`;
-        cloudDescRef.current.style.filter = `blur(${cloudDescBlur.toFixed(1)}px)`;
+        cloudDescRef.current.style.filter = blurFilter(cloudDescBlur);
       }
 
       // 4C. CLOUD TELEMETRY BLOCK (0.88 -> 0.96)
@@ -224,7 +231,7 @@ export function StorySections() {
 
         cloudTeleRef.current.style.opacity = cloudTeleOpacity.toFixed(3);
         cloudTeleRef.current.style.transform = `translate3d(0, ${cloudTeleY.toFixed(1)}px, 0)`;
-        cloudTeleRef.current.style.filter = `blur(${cloudTeleBlur.toFixed(1)}px)`;
+        cloudTeleRef.current.style.filter = blurFilter(cloudTeleBlur);
       }
 
       // 5. DECISION CONTENT (Phase 10 & 11.2: Reveals 1.06 -> 1.18, evaluates 1.20 -> 1.34)
@@ -243,7 +250,7 @@ export function StorySections() {
         const titleBlur = (1 - decT) * 8;
         decisionTitleRef.current.style.opacity = decT.toFixed(3);
         decisionTitleRef.current.style.transform = `translate3d(0, ${titleY.toFixed(1)}px, 0)`;
-        decisionTitleRef.current.style.filter = `blur(${titleBlur.toFixed(1)}px)`;
+        decisionTitleRef.current.style.filter = blurFilter(titleBlur);
       }
 
       if (decisionDescRef.current) {
@@ -252,7 +259,7 @@ export function StorySections() {
         const descBlur = (1 - descT) * 6;
         decisionDescRef.current.style.opacity = descT.toFixed(3);
         decisionDescRef.current.style.transform = `translate3d(0, ${descY.toFixed(1)}px, 0)`;
-        decisionDescRef.current.style.filter = `blur(${descBlur.toFixed(1)}px)`;
+        decisionDescRef.current.style.filter = blurFilter(descBlur);
       }
 
       if (decisionTaskRef.current) {
@@ -261,7 +268,7 @@ export function StorySections() {
         const taskBlur = (1 - taskT) * 4;
         decisionTaskRef.current.style.opacity = taskT.toFixed(3);
         decisionTaskRef.current.style.transform = `translate3d(0, ${taskY.toFixed(1)}px, 0)`;
-        decisionTaskRef.current.style.filter = `blur(${taskBlur.toFixed(1)}px)`;
+        decisionTaskRef.current.style.filter = blurFilter(taskBlur);
       }
 
       if (decisionReasonRef.current) {
@@ -269,7 +276,7 @@ export function StorySections() {
         const reasonBlur = (1 - evalT) * 4;
         decisionReasonRef.current.style.opacity = evalT.toFixed(3);
         decisionReasonRef.current.style.transform = `translate3d(0, ${reasonY.toFixed(1)}px, 0)`;
-        decisionReasonRef.current.style.filter = `blur(${reasonBlur.toFixed(1)}px)`;
+        decisionReasonRef.current.style.filter = blurFilter(reasonBlur);
       }
 
       if (decisionCtaRef.current) {
@@ -287,7 +294,7 @@ export function StorySections() {
         candidateCardsContainerRef.current.style.pointerEvents =
           cardsT > 0.1 ? "auto" : "none";
         candidateCardsContainerRef.current.style.transform = `translate3d(0, calc(-50% + ${(1 - cardsT) * 30}px), 0)`;
-        candidateCardsContainerRef.current.style.filter = `blur(${((1 - cardsT) * 6).toFixed(1)}px)`;
+        candidateCardsContainerRef.current.style.filter = blurFilter((1 - cardsT) * 6);
       }
 
       // Candidate Card Highlights when evaluated

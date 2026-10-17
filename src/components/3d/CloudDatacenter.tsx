@@ -9,6 +9,7 @@ import * as THREE from "three";
 import type { Group, PointLight } from "three";
 import { scrollState } from "@/store/scrollStore";
 import { HOLOGRAM_LANDING, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
+import { isLowEndDevice } from "@/lib/three/device";
 
 interface CloudDatacenterProps {
   position?: [number, number, number];
@@ -28,7 +29,8 @@ export function CloudDatacenter({
   // References to emissive materials with their normalized baseline intensities
   const emmisItemsRef = useRef<EmissiveTrackItem[]>([]);
   // Front faces only: the dense hall's stacked additive layers would otherwise blow out to white.
-  const hologram = useMemo(() => (HOLOGRAM_LANDING ? createHologramMaterial("#a78bfa", THREE.FrontSide) : null), []);
+  const hologram = useMemo(() => (HOLOGRAM_LANDING ? createHologramMaterial("#a78bfa", THREE.FrontSide, true) : null), []);
+  const lightRig = !hologram || !isLowEndDevice();
 
   // Load custom Blender Cloud datacenter asset
   const { scene } = useGLTF("/assets/cloud/cloud_datacenter_clean.glb");
@@ -80,7 +82,7 @@ export function CloudDatacenter({
     });
 
     // Hologram twin outside the hover lens; the real model above shows inside it.
-    if (hologram) addHologramLayer(cl, hologram);
+    if (hologram) addHologramLayer(cl, hologram, { reveal: true });
     return cl;
   }, [scene, hologram]);
 
@@ -142,52 +144,56 @@ export function CloudDatacenter({
       {/* Custom Blender Enterprise Cloud Datacenter 3D Model */}
       <primitive object={clonedScene} />
 
-      {/* Cinematic Lighting for Custom Isometric Datacenter Facility */}
-      {/* 1. Primary Violet Aisle Point Light (Deep violet/purple datacenter corridor glow) */}
-      <pointLight
-        ref={aisleLightRef}
-        color="#8b5cf6"
-        intensity={3.2}
-        distance={8.5}
-        decay={1.8}
-        position={[0, 1.4, 0]}
-      />
+      {/* Cinematic Lighting for Custom Isometric Datacenter Facility (with holograms only the hover reveal uses it; skipped on low-end) */}
+      {lightRig && (
+        <>
+          {/* 1. Primary Violet Aisle Point Light (Deep violet/purple datacenter corridor glow) */}
+          <pointLight
+            ref={aisleLightRef}
+            color="#8b5cf6"
+            intensity={3.2}
+            distance={8.5}
+            decay={1.8}
+            position={[0, 1.4, 0]}
+          />
 
-      {/* 2. Secondary Front/Aisle Cyan Fill Light (Technical cyan server LED accent) */}
-      <pointLight
-        color="#21ceff"
-        intensity={1.8}
-        distance={6.5}
-        decay={1.8}
-        position={[-1.5, 1.0, 3.8]}
-      />
+          {/* 2. Secondary Front/Aisle Cyan Fill Light (Technical cyan server LED accent) */}
+          <pointLight
+            color="#21ceff"
+            intensity={1.8}
+            distance={6.5}
+            decay={1.8}
+            position={[-1.5, 1.0, 3.8]}
+          />
 
-      {/* 3. Overhead Cool Neutral Key Light (Illuminates cable ladders, conduits & gantry) */}
-      <pointLight
-        color="#f1f5f9"
-        intensity={2.6}
-        distance={10.0}
-        decay={1.8}
-        position={[-2.0, 4.5, 1.0]}
-      />
+          {/* 3. Overhead Cool Neutral Key Light (Illuminates cable ladders, conduits & gantry) */}
+          <pointLight
+            color="#f1f5f9"
+            intensity={2.6}
+            distance={10.0}
+            decay={1.8}
+            position={[-2.0, 4.5, 1.0]}
+          />
 
-      {/* 4. Soft Violet Rim Light (Sharp silhouette separation from deep space) */}
-      <pointLight
-        color="#aa35ff"
-        intensity={3.4}
-        distance={9.0}
-        decay={1.8}
-        position={[2.5, 3.5, -4.5]}
-      />
+          {/* 4. Soft Violet Rim Light (Sharp silhouette separation from deep space) */}
+          <pointLight
+            color="#aa35ff"
+            intensity={3.4}
+            distance={9.0}
+            decay={1.8}
+            position={[2.5, 3.5, -4.5]}
+          />
 
-      {/* 5. Soft Lower Platform Fill Light (Cutaway edge & satin titanium floor tiles) */}
-      <pointLight
-        color="#94a3b8"
-        intensity={1.6}
-        distance={7.0}
-        decay={1.8}
-        position={[1.8, 0.6, 4.5]}
-      />
+          {/* 5. Soft Lower Platform Fill Light (Cutaway edge & satin titanium floor tiles) */}
+          <pointLight
+            color="#94a3b8"
+            intensity={1.6}
+            distance={7.0}
+            decay={1.8}
+            position={[1.8, 0.6, 4.5]}
+          />
+        </>
+      )}
     </group>
   );
 }
