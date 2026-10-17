@@ -21,6 +21,7 @@ function TelemetryCard({ tier }: { tier: keyof typeof TIERS }) {
       <div className="flex items-center gap-2 mb-1 pb-2" style={{ borderBottom: `1px solid ${color}4d` }}>
          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
          <span className="font-mono text-[10px] uppercase font-bold tracking-widest" style={{ color }}>{title}</span>
+         <span className="ml-auto font-mono text-[7.5px] tracking-wider text-slate-400">SIM</span>
       </div>
 
       <div className="flex flex-col gap-1.5 font-mono text-[9px] text-slate-300">

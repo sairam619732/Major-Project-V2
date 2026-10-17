@@ -73,9 +73,10 @@ async def get_real_local_telemetry():
         "battery_pct": battery_pct,
         "battery_status": battery_status,
         "battery_is_real": battery_is_real,
+        # Not measured: a fixed on-device dispatch overhead used as the DQN's local base latency.
         "base_latency_ms": 1.2,
-        "base_latency_status": "MEASURED (Local Dispatch Loopback)",
-        "base_latency_is_real": True,
+        "base_latency_status": "ASSUMED (fixed on-device dispatch overhead)",
+        "base_latency_is_real": False,
     }
 
 

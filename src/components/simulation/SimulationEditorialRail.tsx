@@ -837,7 +837,7 @@ export function SimulationCompactControls() {
                 unit="%"
                 accentColor="#fbbf24"
                 pct={state.device.cpuAvailablePct}
-                statusBadge={isLocalReal ? "REAL" : "APPLIED"}
+                statusBadge={isLocalReal ? "REAL" : "SIMULATED"}
                 statusColor={isLocalReal ? "text-emerald-300 border-emerald-500/30" : "text-amber-300 border-amber-500/30"}
                 subtitle={isLocalReal ? `Host load: ${realLocalTelemetry?.cpu_load}% (${realLocalTelemetry?.cpu_count} logical cores)` : undefined}
               />
@@ -847,19 +847,19 @@ export function SimulationCompactControls() {
                 unit="%"
                 accentColor="#fbbf24"
                 pct={state.device.memoryAvailablePct}
-                statusBadge={isLocalReal ? "REAL" : "APPLIED"}
+                statusBadge={isLocalReal ? "REAL" : "SIMULATED"}
                 statusColor={isLocalReal ? "text-emerald-300 border-emerald-500/30" : "text-amber-300 border-amber-500/30"}
                 subtitle={isLocalReal ? `RAM total: ${realLocalTelemetry?.memory_total_gb} GB` : undefined}
               />
               <ReadOnlyTelemetryIndicator
                 label="Battery Level"
-                value={realLocalTelemetry?.battery_pct != null ? state.device.batteryPct : "AC MAINS"}
-                unit={realLocalTelemetry?.battery_pct != null ? "%" : ""}
+                value={isLocalReal && realLocalTelemetry?.battery_pct == null ? "AC MAINS" : state.device.batteryPct}
+                unit={isLocalReal && realLocalTelemetry?.battery_pct == null ? "" : "%"}
                 accentColor="#fbbf24"
-                pct={realLocalTelemetry?.battery_pct != null ? state.device.batteryPct : 100}
-                statusBadge={realLocalTelemetry?.battery_is_real ? "REAL" : "UNAVAILABLE"}
-                statusColor={realLocalTelemetry?.battery_is_real ? "text-emerald-300 border-emerald-500/30" : "text-slate-400 border-white/[0.08]"}
-                subtitle={realLocalTelemetry?.battery_status || "Desktop / AC Mains"}
+                pct={state.device.batteryPct}
+                statusBadge={!isLocalReal ? "SIMULATED" : realLocalTelemetry?.battery_is_real ? "REAL" : "100% ASSUMED"}
+                statusColor={isLocalReal && realLocalTelemetry?.battery_is_real ? "text-emerald-300 border-emerald-500/30" : "text-slate-400 border-white/[0.08]"}
+                subtitle={!isLocalReal ? "Set by the local workload condition" : realLocalTelemetry?.battery_is_real ? realLocalTelemetry.battery_status : "No battery detected (desktop / AC mains)"}
               />
               <ReadOnlyTelemetryIndicator
                 label="Base Latency"
@@ -867,9 +867,9 @@ export function SimulationCompactControls() {
                 unit="MS"
                 accentColor="#fbbf24"
                 pct={Math.min(100, (state.device.latencyMs / 10) * 100)}
-                statusBadge="LOOPBACK"
-                statusColor="text-slate-400 border-white/[0.08]"
-                subtitle="Local dispatch overhead"
+                statusBadge="ASSUMED"
+                statusColor="text-amber-300 border-amber-500/30"
+                subtitle="Fixed dispatch overhead (not measured)"
               />
             </div>
           </div>

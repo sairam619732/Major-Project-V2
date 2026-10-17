@@ -100,8 +100,8 @@ export interface LocalTelemetryResponse {
   battery_status: string;
   battery_is_real: boolean;
   base_latency_ms: number;
-  latency_is_real: boolean;
-  host_type: string;
+  base_latency_status: string;
+  base_latency_is_real: boolean;
 }
 
 export interface BackendHealthResponse {

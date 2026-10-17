@@ -66,6 +66,8 @@ let currentExperimentConditions: ExperimentConditions = { ...DEFAULT_EXPERIMENT_
 let currentRealLocalTelemetry: LocalTelemetryResponse | null = null;
 let currentTelemetryLoading: boolean = false;
 let hasAttemptedTelemetryFetch: boolean = false;
+let telemetryPollers = 0;
+let telemetryPollTimer: ReturnType<typeof setInterval> | null = null;
 
 export interface SystemLogEvent {
   id: string;
@@ -232,6 +234,10 @@ function applyConditionsToEnvironment(cond: ExperimentConditions) {
     lastEvaluatedAt: Date.now(),
   };
 }
+
+// Start from the selected conditions so the cards, latency panel and DQN inputs match the buttons
+// (the raw DEFAULT_SIMULATION_* values are landing-page demo numbers, not any condition).
+applyConditionsToEnvironment(currentExperimentConditions);
 
 // Compute initial decision via deterministic engine
 let currentDecisionResult: DecisionResult = evaluateOffloadingDecision(
@@ -505,6 +511,25 @@ export const simulationStore = {
     currentApiStatus = "idle";
     currentApiError = null;
     evaluateAndUpdate();
+  },
+
+  /**
+   * Keep local telemetry fresh while a consumer is mounted (shared across callers): fetches now,
+   * then every `intervalMs`. Returns the stop function for a useEffect cleanup.
+   */
+  startTelemetryPolling(intervalMs = 5000): () => void {
+    telemetryPollers += 1;
+    if (telemetryPollers === 1) {
+      simulationStore.fetchRealTelemetry();
+      telemetryPollTimer = setInterval(() => simulationStore.fetchRealTelemetry(), intervalMs);
+    }
+    return () => {
+      telemetryPollers -= 1;
+      if (telemetryPollers === 0 && telemetryPollTimer !== null) {
+        clearInterval(telemetryPollTimer);
+        telemetryPollTimer = null;
+      }
+    };
   },
 
   async fetchRealTelemetry() {
