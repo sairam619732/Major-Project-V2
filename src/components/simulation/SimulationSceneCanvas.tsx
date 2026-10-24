@@ -4,21 +4,24 @@
 
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Text, useGLTF } from "@react-three/drei";
+import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { simulationStore } from "@/lib/simulation/simulationState";
 import { SparseDeepSpaceStars } from "@/components/3d/SparseDeepSpaceStars";
 import { AdaptiveQuality, canvasQuality, useInView } from "@/lib/three/renderQuality";
-import { HOLOGRAM_SIMULATION, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
+import { createHologramScreenMaterial } from "@/lib/three/hologram";
+import { HOLOGRAM_VIEWS, viewPoint, viewQuaternion } from "@/lib/three/hologramViews";
+import { HologramImage, useHologramImage } from "@/components/3d/HologramImage";
 import { SimulationEdgeTelemetryOverlay, SimulationCloudTelemetryOverlay } from "@/components/simulation/SimulationTelemetryOverlays";
 
 type Target = "local" | "edge" | "cloud";
 const COLORS = { local: "#38bdf8", edge: "#34d399", cloud: "#a78bfa" };
+// Model images come from /dev/hologram-bake (views sim-local / sim-edge / sim-cloud).
 const MODELS = {
-  local: { url: "/assets/device/sci_fi_tablet.glb", position: [0, 2.05, 0], rotation: [1.72, 0, 0], size: 2.85 },
-  edge: { url: "/assets/edge/data_center_rack.glb", position: [-1, -1.25, 0], rotation: [0.12, -1.9, 0], size: 2.3 },
-  cloud: { url: "/assets/cloud/cloud_datacenter_clean.glb", position: [1, -1.25, 0], rotation: [0.3, -0.85, 0], size: 2.65 },
-} satisfies Record<Target, { url: string; position: [number, number, number]; rotation: [number, number, number]; size: number }>;
+  local: { position: [0, 2.05, 0] },
+  edge: { position: [-1, -1.25, 0] },
+  cloud: { position: [1, -1.25, 0] },
+} satisfies Record<Target, { position: [number, number, number] }>;
 const TASK = new THREE.Vector3(0, .25, .5);
 
 
@@ -159,7 +162,8 @@ function renderTabletCanvas(
 function Candidate({ target, spread }: { target: Target; spread: number }) {
   const config = MODELS[target];
   const x = Math.sign(config.position[0]) * spread;
-  const { scene } = useGLTF(config.url);
+  const view = HOLOGRAM_VIEWS[`sim-${target}`];
+  const quaternion = useMemo(() => viewQuaternion(view), [view]);
   const group = useRef<THREE.Group>(null);
   const lastScreen = useRef("");
   const weight = useRef(0);
@@ -171,46 +175,9 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
     texture.colorSpace = THREE.SRGBColorSpace;
     return { canvas, texture };
   }, [target]);
-  // The dense cloud hall shows front faces only, otherwise its stacked additive layers blow out to white.
-  const hologram = useMemo(() =>
-    HOLOGRAM_SIMULATION ? createHologramMaterial(COLORS[target], target === "cloud" ? THREE.FrontSide : THREE.DoubleSide) : null, [target]);
-  const model = useMemo(() => {
-    const clone = scene.clone(true);
-    clone.traverse(child => {
-      if (!(child instanceof THREE.Mesh)) return;
-      const copy = (original: THREE.Material) => {
-        const mat = original.clone();
-        if (mat instanceof THREE.MeshStandardMaterial) {
-          mat.envMapIntensity = 1.4;
-          mat.metalness = Math.min(mat.metalness, .55);
-          mat.roughness = Math.max(mat.roughness, .3);
-          if (target === "edge") {
-            if (mat.emissiveIntensity > 0 && mat.emissive.getHex() !== 0) mat.emissive.set(COLORS.edge);
-            if (!mat.map && mat.color.r + mat.color.g + mat.color.b < .1) mat.color.set("#263c44");
-          }
-          if (screen && child.name.toLowerCase().includes("screen")) {
-            mat.map = screen.texture; mat.emissiveMap = screen.texture;
-            mat.emissive.set("white"); mat.emissiveIntensity = 1;
-          }
-        }
-        return mat;
-      };
-      child.material = Array.isArray(child.material) ? child.material.map(copy) : copy(child.material);
-    });
-    // Pure hologram (no hover reveal here); the tablet screen keeps its live telemetry texture.
-    if (hologram) addHologramLayer(clone, hologram, { screen: screen ? { map: screen.texture, color: COLORS[target] } : undefined });
-    clone.rotation.set(...config.rotation);
-    clone.updateWorldMatrix(true, true);
-    const box = new THREE.Box3().setFromObject(clone);
-    const extent = box.getSize(new THREE.Vector3());
-    const scale = config.size / Math.max(extent.x, extent.y, extent.z);
-    clone.scale.setScalar(scale);
-    clone.updateWorldMatrix(true, true);
-    box.setFromObject(clone);
-    clone.position.sub(box.getCenter(new THREE.Vector3()));
-    clone.updateWorldMatrix(true, true);
-    return clone;
-  }, [scene, config, screen, target, hologram]);
+  const hologram = useHologramImage(`sim-${target}`, COLORS[target]);
+  // The tablet screen keeps its live telemetry texture, drawn over the image.
+  const screenMaterial = useMemo(() => (screen ? createHologramScreenMaterial(screen.texture, COLORS[target]) : undefined), [screen, target]);
   const resources = useMemo(() => {
     const initialPoints = target === "cloud" ? [TASK, TASK, TASK] : [TASK, TASK];
     const geometry = new THREE.BufferGeometry().setFromPoints(initialPoints);
@@ -221,30 +188,23 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
     const points = new THREE.BufferGeometry();
     points.setAttribute("position", new THREE.BufferAttribute(new Float32Array(24), 3));
     const signal = new THREE.PointsMaterial({ color: COLORS[target], size: 5, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-    return { geometry, material, line, points, signal, box: new THREE.Box3(), anchor: new THREE.Vector3() };
+    return { geometry, material, line, points, signal, anchor: new THREE.Vector3() };
   }, [target]);
   useEffect(() => () => {
     resources.geometry.dispose(); resources.material.dispose(); resources.points.dispose(); resources.signal.dispose();
     screen?.texture.dispose();
-    model.traverse(child => {
-      if (child instanceof THREE.Mesh) (Array.isArray(child.material) ? child.material : [child.material]).forEach(mat => mat.dispose());
-    });
-  }, [resources, screen, model]);
+    screenMaterial?.dispose();
+  }, [resources, screen, screenMaterial]);
   useFrame(({ clock }, delta) => {
     if (!group.current) return;
     const decision = simulationStore.getDecision();
     weight.current = THREE.MathUtils.damp(weight.current, decision.selectedTarget === target ? 1 : 0, 5, delta);
-    if (hologram) {
-      hologram.uniforms.uTime.value = clock.elapsedTime;
-      // The tier the DQN agent picked projects brighter.
-      hologram.uniforms.uIntensity.value = .65 + weight.current * .4;
-    }
-    // Measure only visible model geometry after final normalization and placement.
-    group.current.updateWorldMatrix(true, true);
-    resources.box.setFromObject(model);
-    resources.box.getCenter(resources.anchor);
-    // Front-facing center of the actual world-space bounds: the line ends on the model.
-    resources.anchor.z = resources.box.max.z;
+    hologram.uniforms.uTime.value = clock.elapsedTime;
+    // The tier the DQN agent picked projects brighter.
+    hologram.uniforms.uIntensity.value = .65 + weight.current * .4;
+    // The line ends on the centre of the model in its image.
+    const [minU, minV, maxU, maxV] = view.content;
+    viewPoint(view, quaternion, (minU + maxU) / 2, (minV + maxV) / 2, resources.anchor).add(group.current.position);
     const positions = resources.geometry.attributes.position as THREE.BufferAttribute;
     const edgeWaypoint = new THREE.Vector3(-spread, MODELS.edge.position[1], 0.4);
     if (target === "cloud") {
@@ -304,8 +264,7 @@ function Candidate({ target, spread }: { target: Target; spread: number }) {
     <primitive object={resources.line} />
     <points name={`simulation-signal-${target}`} geometry={resources.points} material={resources.signal} frustumCulled={false} />
     <group ref={group} position={[x, config.position[1], config.position[2]]} name={`simulation-${target}`}>
-      <primitive object={model} dispose={null} />
-      {!hologram && <pointLight color={COLORS[target]} position={[0, 1, 2]} intensity={3} distance={5} />}
+      <HologramImage id={`sim-${target}`} material={hologram} screenMaterial={screenMaterial} />
     </group>
     <group position={[x, target === "local" ? 3 : -2.7, 0]}>
       <Label color={COLORS[target]}>{target.toUpperCase()} {target === "local" ? "// DEVICE" : target === "edge" ? "// SERVER" : "// DATACENTER"}</Label>
@@ -380,4 +339,3 @@ export function SimulationSceneCanvas() {
   </div>;
 }
 
-Object.values(MODELS).forEach(model => useGLTF.preload(model.url));

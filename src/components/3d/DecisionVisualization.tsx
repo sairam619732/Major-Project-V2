@@ -3,18 +3,18 @@
 // 1. LOCAL TABLET: Correct orientation with upright screen facing camera via [Math.PI/2, 0, 0]
 // 2. EDGE SERVER: Substantially enlarged (~2.7x) with front-facing server blades & emerald LEDs
 // 3. CLOUD DATACENTER: Balanced footprint with isometric orientation
-// 4. PHYSICAL CONNECTIVITY: Dynamically derives exact world-space anchor points from candidate bounding boxes
+// 4. PHYSICAL CONNECTIVITY: Derives world-space anchor points from where each model sits in its image
 //    Lines and streaming quanta physically touch the model surfaces without empty space or gaps.
+// The candidates are pre-rendered model images shown as holograms (see HologramImage).
 
 "use client";
 
 /* eslint-disable react-hooks/immutability -- R3F owns these mutable Three.js objects; frame callbacks update GPU resources without React renders. */
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import type { Group, Points, PointLight, MeshBasicMaterial, Mesh } from "three";
+import type { Group, Points, MeshBasicMaterial, Mesh } from "three";
 import { scrollState } from "@/store/scrollStore";
 import {
   evaluateOffloadingDecision,
@@ -25,7 +25,24 @@ import {
 } from "@/lib/offloading/decisionEngine";
 import { simulationStore } from "@/lib/simulation/simulationState";
 import { transitionStore } from "@/lib/transition/transitionStore";
-import { HOLOGRAM_LANDING, addHologramLayer, createHologramMaterial } from "@/lib/three/hologram";
+import { createHologramScreenMaterial } from "@/lib/three/hologram";
+import { HOLOGRAM_VIEWS, viewPoint, viewQuaternion, type HologramViewId } from "@/lib/three/hologramViews";
+import { HologramImage, useHologramImage } from "./HologramImage";
+
+// Image layout of each candidate, for anchoring the evaluation paths on the model itself.
+function candidateView(id: HologramViewId) {
+  const view = HOLOGRAM_VIEWS[id];
+  const [minU, minV, maxU, maxV] = view.content;
+  return { view, quaternion: viewQuaternion(view), minU, minV, maxU, maxV, midU: (minU + maxU) / 2 };
+}
+const LOCAL_VIEW = candidateView("decision-local");
+const EDGE_VIEW = candidateView("decision-edge");
+const CLOUD_VIEW = candidateView("decision-cloud");
+
+/** World point at image coordinates (u, v) of a candidate whose group is `node`. */
+function candidatePoint(c: ReturnType<typeof candidateView>, node: Group, u: number, v: number, target: THREE.Vector3) {
+  return viewPoint(c.view, c.quaternion, u, v, target).multiplyScalar(node.scale.x).add(node.position);
+}
 
 // Smooth Hermite interpolation helper
 function smoothstep(min: number, max: number, value: number) {
@@ -101,11 +118,6 @@ export function DecisionVisualization() {
   const edgeNodeRef = useRef<Group>(null);
   const cloudNodeRef = useRef<Group>(null);
 
-  // Candidate Lights
-  const localLightRef = useRef<PointLight>(null);
-  const edgePulseLightRef = useRef<PointLight>(null);
-  const cloudLightRef = useRef<PointLight>(null);
-
   // Halo Mesh Ref
   const haloMeshRef = useRef<Mesh>(null);
   const edgeHaloMatRef = useRef<MeshBasicMaterial>(null);
@@ -113,29 +125,12 @@ export function DecisionVisualization() {
   // Streaming Quanta Particles along the selected path
   const quantaRef = useRef<Points>(null);
 
-  // Track dynamic emissive materials for each real candidate asset
-  const tabletEmissivesRef = useRef<THREE.MeshStandardMaterial[]>([]);
-  const edgeEmissivesRef = useRef<THREE.MeshStandardMaterial[]>([]);
-  const cloudEmissivesRef = useRef<THREE.MeshStandardMaterial[]>([]);
-
-  // Hologram materials in each candidate's panel colour (null when HOLOGRAM_LANDING is off).
-  // The dense cloud hall shows front faces only so its stacked additive layers don't blow out.
-  const holo = useMemo(
-    () =>
-      HOLOGRAM_LANDING
-        ? {
-            local: createHologramMaterial("#fbbf24"),
-            edge: createHologramMaterial("#34d399"),
-            cloud: createHologramMaterial("#a78bfa", THREE.FrontSide),
-          }
-        : null,
-    []
-  );
-
-  // 1. Load Authentic GLB Assets (cached in memory from earlier sections)
-  const { scene: tabletScene } = useGLTF("/assets/device/sci_fi_tablet.glb");
-  const { scene: edgeScene } = useGLTF("/assets/edge/data_center_rack.glb");
-  const { scene: cloudScene } = useGLTF("/assets/cloud/cloud_datacenter_clean.glb");
+  // 1. Candidate holograms in each candidate's panel colour (pre-rendered model images)
+  const holo = {
+    local: useHologramImage("decision-local", "#fbbf24"),
+    edge: useHologramImage("decision-edge", "#34d399"),
+    cloud: useHologramImage("decision-cloud", "#a78bfa"),
+  };
 
   // 2. Evaluate Deterministic Decision Result
   const decisionResult = useMemo(
@@ -167,14 +162,11 @@ export function DecisionVisualization() {
   const taskLeftAnchor = useMemo(() => new THREE.Vector3(25.86, 0.28, 0.02), []);
   const taskRightAnchor = useMemo(() => new THREE.Vector3(26.14, 0.28, 0.02), []);
 
-  // Dynamic World-Space Target Anchors (computed every frame from bounding boxes)
+  // Dynamic World-Space Target Anchors (computed every frame from where each model sits in its image)
   const localAnchor = useRef(new THREE.Vector3(26.00, 1.63, 0.05));
   const edgeAnchor = useRef(new THREE.Vector3(25.05, -0.62, 0.05));
   const cloudAnchor = useRef(new THREE.Vector3(26.70, -0.65, 0.05));
-
-  // Scratch objects for zero-allocation per-frame bounding box calculations
-  const tempBox = useRef(new THREE.Box3());
-  const tempCenter = useRef(new THREE.Vector3());
+  const edgeBase = useRef(new THREE.Vector3());
 
   // 4. High-Resolution Tablet OLED Screen Texture (Amber Identity)
   const tabletScreenTexture = useMemo(() => {
@@ -203,146 +195,18 @@ export function DecisionVisualization() {
     return tex;
   }, [decisionResult.candidateScores.local.score]);
 
-  // 5. Cloned & Isolated Models
-  // 5A. Cloned Compact Tablet (LOCAL - Front screen configured)
-  const { clonedTablet, holoScreens } = useMemo(() => {
-    tabletEmissivesRef.current = [];
-    const cl = tabletScene.clone(true);
-
-    cl.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-
-        if (mesh.material) {
-          const origMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-          const mat = (origMat as THREE.MeshStandardMaterial).clone();
-          mat.envMapIntensity = 1.3;
-
-          const isScreen = mesh.name.toLowerCase().includes("screen");
-          if (isScreen && tabletScreenTexture) {
-            mat.map = tabletScreenTexture;
-            mat.emissiveMap = tabletScreenTexture;
-            mat.emissive = new THREE.Color("#ffffff");
-            mat.emissiveIntensity = 1.2;
-            mat.roughness = 0.10;
-            mat.metalness = 0.05;
-            mat.needsUpdate = true;
-            tabletEmissivesRef.current.push(mat);
-          } else {
-            mat.roughness = 0.35;
-            mat.metalness = 0.70;
-            mat.color = new THREE.Color("#181d29");
-            mat.needsUpdate = true;
-          }
-          mesh.material = mat;
-        }
-      }
-    });
-
-    // Pure hologram here (the hover reveal is only on the opening sections).
-    const holoScreens = holo
-      ? addHologramLayer(cl, holo.local, {
-          screen: tabletScreenTexture ? { map: tabletScreenTexture, color: "#fcd34d" } : undefined,
-          detail: 0.35,
-        })
-      : [];
-    return { clonedTablet: cl, holoScreens };
-  }, [tabletScene, tabletScreenTexture, holo]);
-
-  // 5B. Cloned Compact Edge Server (EDGE - Substantially enlarged)
-  const clonedEdge = useMemo(() => {
-    edgeEmissivesRef.current = [];
-    const cl = edgeScene.clone(true);
-
-    cl.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-
-        if (mesh.material) {
-          const origMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-          const mat = (origMat as THREE.MeshStandardMaterial).clone();
-          mat.envMapIntensity = 1.4;
-
-          // Chassis body: deep space dark metallic finish
-          if (mat.name === "material") {
-            mat.roughness = 0.32;
-            mat.metalness = 0.80;
-            mat.color = new THREE.Color("#0c1018");
-            mat.needsUpdate = true;
-          }
-          // Acrylic door: clear transparent
-          else if (mat.name === "Mat_1") {
-            mat.transparent = true;
-            mat.opacity = 0.18;
-            mat.roughness = 0.08;
-            mat.metalness = 0.15;
-            mat.color = new THREE.Color("#0a0f18");
-            mat.needsUpdate = true;
-          }
-          // Status indicators & LEDs: Emerald accent
-          else {
-            mat.roughness = 0.25;
-            mat.metalness = 0.50;
-            mat.color = new THREE.Color("#10b981");
-            mat.emissive = new THREE.Color("#05df72");
-            mat.emissiveIntensity = 2.4;
-            mat.needsUpdate = true;
-            edgeEmissivesRef.current.push(mat);
-          }
-          mesh.material = mat;
-        }
-      }
-    });
-
-    if (holo) addHologramLayer(cl, holo.edge, { detail: 0.9 });
-    return cl;
-  }, [edgeScene, holo]);
-
-  // 5C. Cloned Compact Cloud Datacenter (CLOUD - Visual balance)
-  const clonedCloud = useMemo(() => {
-    cloudEmissivesRef.current = [];
-    const cl = cloudScene.clone(true);
-
-    cl.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-
-        if (mesh.material) {
-          const origMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-          const mat = (origMat as THREE.MeshStandardMaterial).clone();
-          mat.envMapIntensity = 1.3;
-
-          const isEmissive =
-            (mat.emissive && mat.emissive.getHex() > 0) ||
-            (mat.name && mat.name.toUpperCase().includes("EMISSIVE")) ||
-            (mesh.name && mesh.name.toUpperCase().includes("EMISSIVE"));
-
-          if (isEmissive) {
-            mat.color = new THREE.Color("#a855f7");
-            mat.emissive = new THREE.Color("#8b5cf6");
-            mat.emissiveIntensity = 1.6;
-            mat.needsUpdate = true;
-            cloudEmissivesRef.current.push(mat);
-          } else {
-            mat.roughness = 0.35;
-            mat.metalness = 0.70;
-            mat.color = new THREE.Color("#0c0f1d");
-            mat.needsUpdate = true;
-          }
-          mesh.material = mat;
-        }
-      }
-    });
-
-    if (holo) addHologramLayer(cl, holo.cloud);
-    return cl;
-  }, [cloudScene, holo]);
+  // 5. Tablet screen drawn live over the LOCAL hologram (redrawn with real readings in simulation)
+  const screenMaterial = useMemo(
+    () => (tabletScreenTexture ? createHologramScreenMaterial(tabletScreenTexture, "#fcd34d") : undefined),
+    [tabletScreenTexture]
+  );
+  useEffect(
+    () => () => {
+      tabletScreenTexture?.dispose();
+      screenMaterial?.dispose();
+    },
+    [tabletScreenTexture, screenMaterial]
+  );
 
   // 6. Dynamic Evaluation Line Geometries (Updated dynamically each frame to touch models)
   const localLineGeo = useMemo(() => {
@@ -520,43 +384,25 @@ export function DecisionVisualization() {
     }
 
     // ==================================================
-    // 3. PHYSICAL CONNECTIVITY — DYNAMIC ANCHOR EXTRACTION
-    // Derives visible surface anchors directly from the candidate transformed bounding boxes
+    // 3. PHYSICAL CONNECTIVITY — ANCHORS ON THE MODELS
+    // Points on each image where the model itself is (its bounds inside the image)
     // ==================================================
     if (localNodeRef.current) {
-      localNodeRef.current.updateWorldMatrix(true, false);
-      tempBox.current.setFromObject(localNodeRef.current);
-      tempBox.current.getCenter(tempCenter.current);
-      // Bottom center of the front tablet face
-      localAnchor.current.set(
-        tempCenter.current.x,
-        tempBox.current.min.y + 0.015,
-        tempBox.current.max.z + 0.015
-      );
+      // Bottom center of the tablet
+      candidatePoint(LOCAL_VIEW, localNodeRef.current, LOCAL_VIEW.midU, LOCAL_VIEW.minV, localAnchor.current).y += 0.015;
     }
 
     if (edgeNodeRef.current) {
-      edgeNodeRef.current.updateWorldMatrix(true, false);
-      tempBox.current.setFromObject(edgeNodeRef.current);
-      tempBox.current.getCenter(tempCenter.current);
-      // Top center of the front server rack
-      edgeAnchor.current.set(
-        tempCenter.current.x,
-        tempBox.current.max.y - 0.015,
-        tempBox.current.max.z + 0.015
-      );
+      // Top center of the server rack, and its base for the selection halo
+      candidatePoint(EDGE_VIEW, edgeNodeRef.current, EDGE_VIEW.midU, EDGE_VIEW.maxV, edgeAnchor.current).y -= 0.015;
+      candidatePoint(EDGE_VIEW, edgeNodeRef.current, EDGE_VIEW.midU, EDGE_VIEW.minV, edgeBase.current);
     }
 
     if (cloudNodeRef.current) {
-      cloudNodeRef.current.updateWorldMatrix(true, false);
-      tempBox.current.setFromObject(cloudNodeRef.current);
-      tempBox.current.getCenter(tempCenter.current);
       // Front upper-left entryway of datacenter facing TASK_001
-      cloudAnchor.current.set(
-        tempBox.current.min.x + 0.12,
-        tempBox.current.max.y - 0.06,
-        tempBox.current.max.z - 0.02
-      );
+      candidatePoint(CLOUD_VIEW, cloudNodeRef.current, CLOUD_VIEW.minU, CLOUD_VIEW.maxV, cloudAnchor.current);
+      cloudAnchor.current.x += 0.12;
+      cloudAnchor.current.y -= 0.06;
     }
 
     // Dynamic Selection Halo Ring repositioning & styling
@@ -565,11 +411,7 @@ export function DecisionVisualization() {
         (0.25 + evalT * 0.70 + syncPulse * 0.18 * evalT) * revealT;
 
       if (isEdgeSelected) {
-        haloMeshRef.current.position.set(
-          edgeAnchor.current.x,
-          tempBox.current.min.y + 0.01,
-          edgeAnchor.current.z
-        );
+        haloMeshRef.current.position.set(edgeBase.current.x, edgeBase.current.y + 0.01, edgeBase.current.z);
         haloMeshRef.current.scale.setScalar(1.0);
         edgeHaloMat.color.set("#34d399");
       } else if (isLocalSelected) {
@@ -647,46 +489,6 @@ export function DecisionVisualization() {
       posAttr.needsUpdate = true;
     }
 
-    // Dynamic Emissive Lighting for Real Assets
-    // EDGE (Selected or Candidate)
-    const edgeIntensity =
-      (1.4 + (isEdgeSelected ? evalT * 2.6 + syncPulse * 0.45 * evalT : -evalT * 0.6)) *
-      revealT;
-    for (let i = 0; i < edgeEmissivesRef.current.length; i++) {
-      edgeEmissivesRef.current[i].emissiveIntensity = edgeIntensity;
-    }
-    if (edgePulseLightRef.current) {
-      edgePulseLightRef.current.intensity =
-        (0.8 + (isEdgeSelected ? evalT * 3.2 + syncPulse * 0.6 * evalT : -evalT * 0.4)) *
-        revealT;
-    }
-
-    // LOCAL (Selected or Candidate)
-    const localIntensity =
-      (1.2 + (isLocalSelected ? evalT * 2.4 + syncPulse * 0.4 * evalT : -evalT * 0.5)) *
-      revealT;
-    for (let i = 0; i < tabletEmissivesRef.current.length; i++) {
-      tabletEmissivesRef.current[i].emissiveIntensity = localIntensity;
-    }
-    if (localLightRef.current) {
-      localLightRef.current.intensity =
-        (0.6 + (isLocalSelected ? evalT * 3.0 + syncPulse * 0.5 * evalT : -evalT * 0.3)) *
-        revealT;
-    }
-
-    // CLOUD (Selected or Candidate)
-    const cloudIntensity =
-      (1.2 + (isCloudSelected ? evalT * 2.4 + syncPulse * 0.4 * evalT : -evalT * 0.5)) *
-      revealT;
-    for (let i = 0; i < cloudEmissivesRef.current.length; i++) {
-      cloudEmissivesRef.current[i].emissiveIntensity = cloudIntensity;
-    }
-    if (cloudLightRef.current) {
-      cloudLightRef.current.intensity =
-        (0.6 + (isCloudSelected ? evalT * 3.0 + syncPulse * 0.5 * evalT : -evalT * 0.3)) *
-        revealT;
-    }
-
     // Candidate Evaluation Path Opacities
     localLineMat.opacity =
       (0.35 + (isLocalSelected ? evalT * 0.55 : -evalT * 0.15)) * revealT;
@@ -706,37 +508,20 @@ export function DecisionVisualization() {
       quantaMat.opacity *= lineFade;
       edgeHaloMat.opacity *= lineFade;
 
-      const modelFade = 1 - smoothstep(0.20, 0.60, transP);
-      for (let i = 0; i < edgeEmissivesRef.current.length; i++) {
-        edgeEmissivesRef.current[i].emissiveIntensity *= modelFade;
-      }
-      for (let i = 0; i < tabletEmissivesRef.current.length; i++) {
-        tabletEmissivesRef.current[i].emissiveIntensity *= modelFade;
-      }
-      for (let i = 0; i < cloudEmissivesRef.current.length; i++) {
-        cloudEmissivesRef.current[i].emissiveIntensity *= modelFade;
-      }
-      if (edgePulseLightRef.current) edgePulseLightRef.current.intensity *= modelFade;
-      if (localLightRef.current) localLightRef.current.intensity *= modelFade;
-      if (cloudLightRef.current) cloudLightRef.current.intensity *= modelFade;
     }
 
     // Holograms: fade in with the reveal, the selected candidate projects brighter,
     // and all fade out during the transition to /simulation.
-    if (holo) {
-      const fade = revealT * (1 - smoothstep(0.20, 0.60, transP));
-      const emphasis = (selected: boolean) =>
-        (0.6 + (selected ? 0.5 * evalT + 0.1 * syncPulse * evalT : -0.15 * evalT)) * fade;
-      holo.local.uniforms.uTime.value = t;
-      holo.edge.uniforms.uTime.value = t;
-      holo.cloud.uniforms.uTime.value = t;
-      holo.local.uniforms.uIntensity.value = emphasis(isLocalSelected);
-      holo.edge.uniforms.uIntensity.value = emphasis(isEdgeSelected);
-      holo.cloud.uniforms.uIntensity.value = emphasis(isCloudSelected);
-      for (let i = 0; i < holoScreens.length; i++) {
-        holoScreens[i].opacity = Math.min(1, emphasis(isLocalSelected) * 1.3);
-      }
-    }
+    const fade = revealT * (1 - smoothstep(0.20, 0.60, transP));
+    const emphasis = (selected: boolean) =>
+      (0.6 + (selected ? 0.5 * evalT + 0.1 * syncPulse * evalT : -0.15 * evalT)) * fade;
+    holo.local.uniforms.uTime.value = t;
+    holo.edge.uniforms.uTime.value = t;
+    holo.cloud.uniforms.uTime.value = t;
+    holo.local.uniforms.uIntensity.value = emphasis(isLocalSelected);
+    holo.edge.uniforms.uIntensity.value = emphasis(isEdgeSelected);
+    holo.cloud.uniforms.uIntensity.value = emphasis(isCloudSelected);
+    if (screenMaterial) screenMaterial.opacity = Math.min(1, emphasis(isLocalSelected) * 1.3);
   });
 
   return (
@@ -758,56 +543,17 @@ export function DecisionVisualization() {
       <points ref={quantaRef} geometry={quantaGeo} material={quantaMat} />
 
       {/* ==================================================
-          2. LOCAL CANDIDATE: REAL TABLET GLB (Upright Front Screen)
+          2. LOCAL CANDIDATE: TABLET (screen drawn live on top)
           ================================================== */}
-      <group
-        ref={localNodeRef}
-        position={localPos}
-        scale={0.22}
-        rotation={[0.10, -0.04, 0.0]}
-      >
-        {/* Inner group brings the model from X-Z plane into upright orientation with screen facing camera */}
-        <group rotation={[Math.PI / 2, 0, 0]}>
-          <primitive object={clonedTablet} />
-        </group>
-        {!holo && (
-          <pointLight
-            ref={localLightRef}
-            color="#f59e0b"
-            distance={3.2}
-            intensity={0.6}
-            position={[0, 0.1, 0.4]}
-          />
-        )}
+      <group ref={localNodeRef} position={localPos} scale={0.22}>
+        <HologramImage id="decision-local" material={holo.local} screenMaterial={screenMaterial} />
       </group>
 
       {/* ==================================================
-          3. EDGE CANDIDATE: REAL EDGE SERVER GLB (Enlarged ~2.7x · Front-Facing)
+          3. EDGE CANDIDATE: EDGE SERVER RACK
           ================================================== */}
-      <group
-        ref={edgeNodeRef}
-        position={edgePos}
-        scale={0.26}
-        rotation={[0.08, -1.75, 0.0]}
-      >
-        <primitive object={clonedEdge} position={[0, -1.157, 0]} />
-        {!holo && (
-          <>
-            <pointLight
-              ref={edgePulseLightRef}
-              color="#10f08e"
-              distance={4.8}
-              intensity={2.8}
-              position={[0.60, 0.15, 0.0]}
-            />
-            <pointLight
-              color="#05df72"
-              distance={3.5}
-              intensity={1.8}
-              position={[0.55, 0.70, 0.0]}
-            />
-          </>
-        )}
+      <group ref={edgeNodeRef} position={edgePos} scale={0.26}>
+        <HologramImage id="decision-edge" material={holo.edge} />
       </group>
 
       {/* Selection Halo Ring at Server Base */}
@@ -819,30 +565,12 @@ export function DecisionVisualization() {
       />
 
       {/* ==================================================
-          4. CLOUD CANDIDATE: REAL CLOUD DATACENTER GLB (Balanced)
+          4. CLOUD CANDIDATE: CLOUD DATACENTER
           ================================================== */}
-      <group
-        ref={cloudNodeRef}
-        position={cloudPos}
-        scale={0.058}
-        rotation={[0.03, -1.15, 0.0]}
-      >
-        <primitive object={clonedCloud} />
-        {!holo && (
-          <pointLight
-            ref={cloudLightRef}
-            color="#8b5cf6"
-            distance={3.4}
-            intensity={0.7}
-            position={[0, 1.4, 0]}
-          />
-        )}
+      <group ref={cloudNodeRef} position={cloudPos} scale={0.058}>
+        <HologramImage id="decision-cloud" material={holo.cloud} />
       </group>
     </group>
   );
 }
 
-// Preload authentic 3D GLB assets for zero-latency instantiation
-useGLTF.preload("/assets/device/sci_fi_tablet.glb");
-useGLTF.preload("/assets/edge/data_center_rack.glb");
-useGLTF.preload("/assets/cloud/cloud_datacenter_clean.glb");

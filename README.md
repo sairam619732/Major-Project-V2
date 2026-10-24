@@ -198,12 +198,12 @@ All metrics reflect actual empirical data from Phase 18 evaluated across **5 ind
 │   ├── EVALUATION.md                  # Comprehensive Scientific Evaluation Methodology
 │   └── DEMO_CHECKLIST.md              # College Presentation Runbook & Demo Script
 ├── public/
-│   ├── assets/                        # 3D models used by the landing page & simulation
+│   ├── assets/                        # 3D models (GLB) and holo/: the model images the site shows
 │   ├── data/                          # Benchmark summary, training history & report for /research
 │   └── samples/                       # Sample image/video workloads
 ├── scripts/models/                    # Procedural GLB generators (Three.js, run with node)
 ├── src/                               # Next.js 16 Frontend
-│   ├── app/                           # Routes (landing, simulation, research, dashboard pages, /api/dataset)
+│   ├── app/                           # Routes (landing, simulation, research, dashboard pages, /api/dataset, /dev/hologram-bake)
 │   ├── components/
 │   │   ├── 3d/                        # Landing page scene & models
 │   │   ├── simulation/                # Simulation Sliders, 3D Canvas & Editorial Rail
@@ -274,6 +274,9 @@ For an optimized production build:
 npm run build
 npm run start
 ```
+
+### Model images
+The tablet, edge rack and cloud datacenter are shown as pre-rendered images (`public/assets/holo/`), not live 3D models. Each image is drawn as an animated hologram, and on the landing page the pointer reveals a real-look image of the model. The images are rendered from the GLB models in `public/assets/` with the site's own hologram shader. After changing a model, run `npm run dev`, open `http://localhost:3000/dev/hologram-bake` and click **Render and save all images**. That page only works in development.
 
 ---
 

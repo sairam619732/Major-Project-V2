@@ -1,5 +1,7 @@
 # Credits & 3D Model Attributions
 
+The site shows these models as images rendered from them (`public/assets/holo/`), so the attributions below also apply to those images.
+
 ## 1. Sci-fi Tablet (Local Computing Device)
 - **Title**: Sci-fi Tablet
 - **Author**: SketcherGuy / NoobiePie ([Sketchfab](https://sketchfab.com/NoobiePie), [Artstation](https://www.artstation.com/artwork/8wzR3x))

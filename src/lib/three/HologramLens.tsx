@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { REAL_MODEL_LAYER, hologramLens } from "./hologram";
+import { hologramLens } from "./hologram";
 
 /**
  * Child of <Canvas>: opens the hover-reveal spotlight around the pointer while it is over the canvas.
@@ -13,7 +13,6 @@ import { REAL_MODEL_LAYER, hologramLens } from "./hologram";
  */
 export function HologramLens({ radius = 200, radiusFraction }: { radius?: number; radiusFraction?: number }) {
   const gl = useThree((s) => s.gl);
-  const camera = useThree((s) => s.camera);
   const pointer = useRef({ x: 0, y: 0, active: false });
 
   useEffect(() => {
@@ -55,10 +54,6 @@ export function HologramLens({ radius = 200, radiusFraction }: { radius?: number
     const current = THREE.MathUtils.damp(hologramLens.uLensRadius.value, target, 8, delta);
     hologramLens.uLensRadius.value = current < 0.5 ? 0 : current;
     hologramLens.uLensTime.value += delta;
-
-    // Only render the real-model copies while the lens is open.
-    if (hologramLens.uLensRadius.value > 0) camera.layers.enable(REAL_MODEL_LAYER);
-    else camera.layers.disable(REAL_MODEL_LAYER);
   });
 
   return null;

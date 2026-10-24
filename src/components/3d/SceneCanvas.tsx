@@ -13,7 +13,6 @@ import { CosmicTransition } from "./CosmicTransition";
 import { CloudToDecisionCosmic } from "./CloudToDecisionCosmic";
 import { DecisionVisualization } from "./DecisionVisualization";
 import { AdaptiveQuality, canvasQuality } from "@/lib/three/renderQuality";
-import { HOLOGRAM_LANDING } from "@/lib/three/hologram";
 import { HologramLens } from "@/lib/three/HologramLens";
 
 export function SceneCanvas() {
@@ -43,8 +42,8 @@ export function SceneCanvas() {
         }}
       >
         <AdaptiveQuality />
-        {/* The hover reveal draws a second, real copy of each model; skip it on weak hardware. */}
-        {HOLOGRAM_LANDING && !quality.lowEnd && <HologramLens radiusFraction={0.6} />}
+        {/* Hover spotlight revealing the real-look model images (cheap: one texture lookup). */}
+        <HologramLens radiusFraction={0.6} />
 
         {/* Deep navy-black background */}
         <color attach="background" args={["#02040A"]} />
