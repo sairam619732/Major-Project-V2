@@ -40,49 +40,44 @@ Vercel runs Python as serverless functions. PyTorch is too large for them, so th
 | No ffmpeg | The node reports that it can't do video; video tasks go to another tier. |
 | 1 M requests, 4 h CPU, 360 GB-h memory per month | Fine for rehearsals and the presentation. **Don't leave your laptop's backend running for days**: it checks the node every 3 s, which keeps the cloud instance awake. |
 
-### Steps
+### Status: deployed
 
-1. **Create a free Vercel account** at <https://vercel.com/signup> (Hobby plan).
+The cloud node is live at **https://edgeoffload-cloud.vercel.app** (Vercel project `edgeoffload-cloud`, account `sairam619732`, region Mumbai `bom1`), deployed from the desktop with Vercel CLI 65.2.0. Checked after deploying:
+- `/health` answers `{"status":"ok","tier":"CLOUD","node_id":"cloud-vercel","model_ready":true}`.
+- `/status` without the key, or with a wrong key, answers `401`.
+- A detection task on the traffic sample finds the same 4 objects as PyTorch, in about 160–210 ms of compute.
+- The backend shows it **online** at about 47 ms latency from the desktop. The first probe after it has been idle can time out while Vercel starts the instance; it recovers on its own.
 
-2. **Build the upload folder.** From the project folder:
+The access key is in Vercel as the secret `NODE_TOKEN`, and the same value is in the desktop's `backend\.env` as `CLOUD_NODE_TOKEN`. Copy the two `CLOUD_NODE_*` lines from that file to your laptop's `backend\.env` (Part 1). Don't paste the key into chats or commit it.
+
+### Updating the cloud node after code changes (on the desktop)
+
+```powershell
+cd "C:\Users\saira\.gemini\config\Major Project V2\backend"
+.\.venv\Scripts\python.exe scripts\build_vercel_node.py
+cd dist\vercel-node
+npx --yes vercel@65.2.0 deploy --prod --yes
+```
+
+The build keeps `dist\vercel-node\.vercel` (the link to the Vercel project), so this always updates the same project. The key stays in Vercel.
+
+### Setting it up from scratch (another account or machine)
+
+1. Create a free Vercel account at <https://vercel.com/signup> (Hobby plan).
+2. Build the folder: `.\.venv\Scripts\python.exe scripts\build_vercel_node.py` (from `backend`).
+3. In `backend\dist\vercel-node`:
    ```powershell
-   cd backend
-   .\.venv\Scripts\python.exe scripts\build_vercel_node.py
+   npx --yes vercel@65.2.0 login
+   npx --yes vercel@65.2.0 project create edgeoffload-cloud
+   npx --yes vercel@65.2.0 link --yes --project edgeoffload-cloud
+   Remove-Item .env.local -ErrorAction SilentlyContinue
+   npx --yes vercel@65.2.0 env add NODE_TOKEN production
+   npx --yes vercel@65.2.0 deploy --prod --yes
    ```
-   This creates `backend\dist\vercel-node` (node code + ONNX model, about 14 MB).
+   `login` prints a link: open it and click **Allow**. `link` writes a `.env.local` with a temporary Vercel token; delete it so it isn't uploaded. `env add` asks for the key: make one with `.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))"` (from `backend`) and put the same value in `CLOUD_NODE_TOKEN` on your laptop.
+4. Check `https://<project>.vercel.app/health` in a browser. If a Vercel login page appears instead, turn off **Settings → Deployment Protection → Vercel Authentication** for the project.
 
-3. **Make an access key** (the node is on the public internet; without the key it refuses all tasks):
-   ```powershell
-   .\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))"
-   ```
-   Copy the printed key somewhere safe. You need it twice: in Vercel and on your laptop.
-
-4. **Deploy with the Vercel CLI** (needs Node.js):
-   ```powershell
-   cd dist\vercel-node
-   npx vercel@latest login
-   npx vercel@latest deploy --prod
-   ```
-   Answer the questions: set up and deploy → **yes**; scope → your account; link to existing project → **no**; project name → e.g. `edgeoffload-cloud`; code directory → `./`; change settings → **no**. Vercel detects FastAPI and installs `requirements.txt` (no PyTorch). The region is Mumbai (`bom1`) from `vercel.json`.
-
-5. **Add the access key to Vercel**, then deploy again so the node picks it up:
-   ```powershell
-   npx vercel@latest env add NODE_TOKEN production
-   npx vercel@latest deploy --prod
-   ```
-   Paste the key from step 3 when asked.
-
-6. **Check it.** Open `https://<project>.vercel.app/health` in a browser. You should see:
-   ```json
-   {"status":"ok","tier":"CLOUD","node_id":"cloud-vercel","model_ready":true}
-   ```
-   - The first request after a while can take several seconds (the instance starts up). Refresh once.
-   - If you see a Vercel login page instead, open the project on vercel.com → **Settings → Deployment Protection** and turn off **Vercel Authentication**.
-   - `/status` without the key answers `401`; that is correct.
-
-7. Note the address (`https://<project>.vercel.app`) and the key for Part 1.
-
-To update the cloud node later (after code changes), repeat steps 2 and 4 (`deploy --prod`); the key stays in Vercel.
+What the deploy folder needs (already set in `backend/deploy/vercel/`): `vercel.json` with `"framework": "fastapi"` and the region, and `pyproject.toml` with the dependencies and `entrypoint = "index:app"`. Without the framework setting, Vercel builds nothing (404). Vercel installs dependencies from `pyproject.toml`, not from a `requirements.txt` next to it.
 
 ---
 
@@ -235,7 +230,7 @@ If port 3000 is taken: `npm run present -- --port=3001`.
 1. Both laptops online, with Radmin VPN open and **both shown in the same network**.
 2. Teammate: start the edge node. The printed Radmin address should match `EDGE_NODE_URL` in your `backend\.env`.
 3. You: open `http://26.x.x.x:8100/health` once to check the edge answers.
-4. Open `https://<project>.vercel.app/health` once to wake the cloud node.
+4. Open `https://edgeoffload-cloud.vercel.app/health` once to wake the cloud node.
 5. You: `npm run present`. All three nodes **online** in the printout, all **LIVE** on `/devices`.
 6. Run one test task on `/simulation` before the audience arrives.
 
@@ -249,7 +244,7 @@ If port 3000 is taken: `npm run present -- --port=3001`.
 | Radmin VPN shows the teammate as connected through a relay, or latency is high | It still works, just slower: the two networks blocked a direct link, so traffic goes through Radmin's servers. Try another network (e.g. a phone hotspot), or Tailscale (Option B). |
 | EDGE error `401` | `EDGE_NODE_TOKEN` on your laptop doesn't match `NODE_TOKEN` on the teammate's laptop. |
 | Cloudflare tunnel stopped working | The `trycloudflare.com` address changes every restart: copy the new one into `EDGE_NODE_URL` and restart `npm run present`. |
-| CLOUD shows OFFLINE right after starting | The Vercel instance is starting up; it turns online within ~30 s. Opening `/health` in a browser first helps. |
+| CLOUD shows OFFLINE right after starting | The Vercel instance is starting up; it turns online within ~30 s. Opening https://edgeoffload-cloud.vercel.app/health in a browser first helps. |
 | CLOUD error `401` | `CLOUD_NODE_TOKEN` on your laptop doesn't match `NODE_TOKEN` in Vercel. |
 | CLOUD error `503` "no NODE_TOKEN set" | Add `NODE_TOKEN` in Vercel (Part 3, step 5) and deploy again. |
 | A task says "over the cloud node's 4 MB limit" | Expected: Vercel accepts at most 4.5 MB per request, so that task ran on another tier. |

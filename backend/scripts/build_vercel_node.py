@@ -23,7 +23,7 @@ FILES = [
     "node/__init__.py",
     "node/server.py",
 ]
-DEPLOY_FILES = ["index.py", "requirements.txt", "vercel.json", ".python-version"]
+DEPLOY_FILES = ["index.py", "pyproject.toml", "vercel.json", ".python-version"]
 TEXT_SUFFIXES = {".py", ".txt", ".json", ".toml", ""}
 
 
@@ -32,7 +32,11 @@ def main() -> None:
     if not model.exists():
         raise SystemExit("Missing the ONNX model: run scripts\\export_detector_onnx.py first.")
     if OUT.exists():
-        shutil.rmtree(OUT)
+        # Start clean, but keep .vercel (the link to your Vercel project) so redeploys go to the same project.
+        for item in OUT.iterdir():
+            if item.name == ".vercel":
+                continue
+            shutil.rmtree(item) if item.is_dir() else item.unlink()
     for rel in FILES:
         (OUT / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(BACKEND / rel, OUT / rel)

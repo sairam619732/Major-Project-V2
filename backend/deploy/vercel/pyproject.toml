@@ -1,0 +1,17 @@
+# Cloud node on Vercel. The detector runs on ONNX Runtime (no PyTorch), so the bundle stays small.
+[project]
+name = "edgeoffload-cloud-node"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "python-multipart>=0.0.9",
+    "numpy>=1.26.0",
+    "pillow>=10.0.0",
+    "psutil>=6.0.0",
+    "onnxruntime>=1.20.0",
+]
+
+# Where the FastAPI app is.
+[tool.vercel]
+entrypoint = "index:app"
