@@ -113,7 +113,7 @@ $$R_t = -\left(w_L \cdot \hat{T} + w_E \cdot \hat{E} + w_C \cdot \hat{C} + w_Q \
 - $P_D$ deadline violation penalty ($w_D = 0.15$).
 
 ### Q-Network & Training
-- **Network Architecture**: 3-layer MLP: $17 \to 128 \to 128 \to 3$ with ReLU activations (42,947 parameters).
+- **Network Architecture**: MLP with three hidden layers: $17 \to 128 \to 128 \to 64 \to 3$, LayerNorm after the first layer and ReLU activations (27,523 parameters).
 - **Loss Function**: Huber Loss (`nn.SmoothL1Loss`).
 - **Optimizer**: Adam ($\text{lr} = 5 \times 10^{-4}$).
 - **Replay Buffer**: Capacity of 10,000 transitions; mini-batch size of 64.

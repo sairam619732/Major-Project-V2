@@ -2,9 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useBackendStatus } from "@/hooks/useBackendStatus";
 
 export function SimulationSidebar({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
+  const backend = useBackendStatus();
+  const agent =
+    backend.kind === "checking"
+      ? { title: "Checking DQN…", status: "Checking…", dot: "bg-slate-500", cls: "text-slate-400" }
+      : backend.kind === "offline"
+        ? { title: "DQN Unavailable", status: "Backend offline", dot: "bg-rose-500 shadow-[0_0_8px_#f43f5e]", cls: "text-rose-400" }
+        : backend.modelLoaded
+          ? { title: "DQN Model Loaded", status: "Checkpoint loaded", dot: "bg-emerald-500 shadow-[0_0_8px_#10b981]", cls: "text-emerald-400" }
+          : { title: "Rule-Based Fallback", status: "No checkpoint loaded", dot: "bg-amber-500 shadow-[0_0_8px_#f59e0b]", cls: "text-amber-400" };
 
   return (
     <>
@@ -65,12 +75,12 @@ export function SimulationSidebar({ open = false, onClose }: { open?: boolean; o
       {/* Footer Status */}
       <div className="p-4 m-4 rounded-lg holo-panel border-emerald-500/25 flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
-          <span className="text-emerald-400 font-bold text-[12px]">DQN Agent Ready</span>
+          <div className={`w-2 h-2 rounded-full ${agent.dot}`}></div>
+          <span className={`${agent.cls} font-bold text-[12px]`}>{agent.title}</span>
         </div>
         <div className="text-[11px] text-slate-400 flex flex-col gap-1">
-          <span>Model: v3 (SSD MobileNet V3)</span>
-          <span>Status: Loaded</span>
+          <span>Policy: DQN · Detector: SSDLite MobileNet V3</span>
+          <span>Status: {agent.status}</span>
         </div>
       </div>
     </aside>

@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useBackendStatus } from "@/hooks/useBackendStatus";
 
 const TOP_LINKS = [
   {
@@ -72,6 +73,13 @@ function useClock() {
 export function SimulationTopHeader({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
   const now = useClock();
+  const backend = useBackendStatus();
+  const status =
+    backend.kind === "online"
+      ? { title: "Backend Online", detail: "API reachable", dot: "bg-emerald-500 shadow-[0_0_8px_#10b981]", cls: "text-emerald-400" }
+      : backend.kind === "offline"
+        ? { title: "Backend Offline", detail: "API not reachable", dot: "bg-rose-500 shadow-[0_0_8px_#f43f5e]", cls: "text-rose-400" }
+        : { title: "Checking…", detail: "Contacting API", dot: "bg-slate-500", cls: "text-slate-400" };
   const currentDate = now?.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) ?? " ";
   const currentTime = now?.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) ?? "--:--";
 
@@ -113,10 +121,10 @@ export function SimulationTopHeader({ onMenuClick }: { onMenuClick?: () => void 
       {/* Status & Time */}
       <div className="flex items-center gap-4 sm:gap-8 flex-shrink-0">
          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
+            <div className={`w-2.5 h-2.5 rounded-full ${status.dot}`}></div>
             <div className="flex flex-col">
-               <span className="text-emerald-400 font-bold text-[13px] leading-tight">System Online</span>
-               <span className="hidden sm:block text-slate-500 text-[11px]">All Services Running</span>
+               <span className={`${status.cls} font-bold text-[13px] leading-tight`}>{status.title}</span>
+               <span className="hidden sm:block text-slate-500 text-[11px]">{status.detail}</span>
             </div>
          </div>
 

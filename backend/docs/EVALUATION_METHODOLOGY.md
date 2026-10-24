@@ -26,7 +26,7 @@ Six offloading policies were evaluated under identical conditions:
 3. **CLOUD-ONLY**: All incoming workloads are transmitted across the wide-area network to the central cloud.
 4. **RANDOM POLICY**: Uniform random discrete selection over $\{0, 1, 2\}$ with fixed pseudorandom seed.
 5. **RULE-BASED GREEDY (MIN-COST HEURISTIC)**: An instantaneous analytic optimizer that evaluates the exact cost function across all three tiers with omniscient knowledge of current queue state and network conditions, choosing the tier that maximizes immediate scalar reward.
-6. **TRAINED DQN**: Deep Q-Network parameterized with a 3-layer MLP (`17 -> 128 -> 128 -> 3`) using ReLU activations, trained over 200 episodes using Experience Replay and Target Network synchronization, operating in pure deterministic evaluation mode (`evaluate=True`, temperature $\tau = 1.0$).
+6. **TRAINED DQN**: Deep Q-Network parameterized with an MLP of three hidden layers (`17 -> 128 -> 128 -> 64 -> 3`) using LayerNorm after the first layer and ReLU activations, trained over 200 episodes using Experience Replay and Target Network synchronization, operating in pure deterministic evaluation mode (`evaluate=True`, temperature $\tau = 1.0$).
 
 ---
 

@@ -102,9 +102,9 @@
 ### 2.3 Optimization & Machine Learning Engine (DQN)
 - **Deep Q-Network Model (`QNetwork`)**:
   - Input Layer: 17 continuous normalized features in $[0.0, 1.0]$.
-  - Hidden Layers: Two dense layers with 128 hidden units each and ReLU activations ($17 \to 128 \to 128 \to 3$).
+  - Hidden Layers: Three dense layers of 128, 128 and 64 units with ReLU activations, plus LayerNorm after the first layer ($17 \to 128 \to 128 \to 64 \to 3$).
   - Output Layer: 3 linear outputs corresponding to the action space $\{0: \text{LOCAL}, 1: \text{EDGE}, 2: \text{CLOUD}\}$.
-  - Parameter Count: 42,947 trainable parameters.
+  - Parameter Count: 27,523 trainable parameters.
 - **Inference Service (`DQNInferenceService`)**:
   - Pinned strictly to CPU (`torch.device("cpu")`).
   - Sets network to `eval()` mode.

@@ -30,7 +30,7 @@ To eliminate sampling bias between competing algorithms:
 
 ## 2. Competing Policies
 
-1. **TRAINED DQN**: Deep Q-Network ($17 \to 128 \to 128 \to 3$) with Boltzmann Softmax confidence.
+1. **TRAINED DQN**: Deep Q-Network ($17 \to 128 \to 128 \to 64 \to 3$) with Boltzmann Softmax confidence.
 2. **RULE-BASED GREEDY (MIN-COST HEURISTIC)**: Evaluates all tiers with instantaneous global knowledge of current queue state and network conditions, picking the action maximizing immediate reward.
 3. **LOCAL-ONLY**: Fixed baseline executing exclusively on mobile CPU ($a = 0$).
 4. **EDGE-ONLY**: Fixed baseline offloading exclusively to edge server ($a = 1$).

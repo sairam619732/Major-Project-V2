@@ -109,6 +109,13 @@ export interface BackendHealthResponse {
   service: string;
 }
 
+export interface ModelStatusResponse {
+  status: string;
+  model_loaded: boolean;
+  model_path: string;
+  device: string;
+}
+
 export class BackendApiError extends Error {
   statusCode?: number;
   details?: unknown;
@@ -368,6 +375,35 @@ export async function executeTaskOffloading(
       ? err.message
       : "Network connection refused";
     throw new BackendApiError(`FastAPI execution connection error: ${msg}`);
+  }
+}
+
+/**
+ * Fetches whether the backend is up and whether the DQN checkpoint is loaded
+ * (if not, the backend answers with its rule-based fallback).
+ */
+export async function fetchModelStatus(timeoutMs = 3000): Promise<ModelStatusResponse> {
+  const baseUrl = getBackendBaseUrl();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${baseUrl}/api/optimization/status`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      throw new BackendApiError(`Model status request failed with status ${res.status}`, res.status);
+    }
+    return (await res.json()) as ModelStatusResponse;
+  } catch (err: unknown) {
+    clearTimeout(timeoutId);
+    if (err instanceof BackendApiError) throw err;
+    const msg = err instanceof Error ? err.message : "Unknown network error";
+    throw new BackendApiError(`Backend unreachable at ${baseUrl}: ${msg}`);
   }
 }
 

@@ -1,9 +1,26 @@
 "use client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useSimulationState } from "@/lib/simulation/simulationState";
+import { simulationStore, useSimulationState } from "@/lib/simulation/simulationState";
+import { useBackendStatus } from "@/hooks/useBackendStatus";
+import { useEffect } from "react";
 
 export default function OverviewPage() {
-  const { state, decision, apiStatus, apiError, executionHistory } = useSimulationState();
+  const { state, decision, decisionSource, apiStatus, realLocalTelemetry, executionHistory } = useSimulationState();
+  const backend = useBackendStatus();
+
+  // Keep the local CPU reading fresh while this page is open (shared poller).
+  useEffect(() => simulationStore.startTelemetryPolling(), []);
+
+  const agent =
+    backend.kind === "checking"
+      ? { text: "Checking…", cls: "text-slate-400" }
+      : backend.kind === "offline"
+        ? { text: "Unavailable", cls: "text-slate-500" }
+        : apiStatus === "running"
+          ? { text: "Evaluating…", cls: "text-blue-400 animate-pulse" }
+          : backend.modelLoaded
+            ? { text: "Model Loaded", cls: "text-blue-400" }
+            : { text: "Rule-Based Fallback", cls: "text-amber-400" };
 
   return (
     <DashboardLayout>
@@ -14,12 +31,15 @@ export default function OverviewPage() {
        
        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="p-6 holo-panel border rounded-xl flex flex-col gap-2 relative overflow-hidden">
-            <span className="text-slate-400 font-mono text-[11px] uppercase tracking-wider">System Status</span>
-            {apiStatus === "error" ? (
-              <span className="text-2xl font-bold text-rose-500">Error</span>
+            <span className="text-slate-400 font-mono text-[11px] uppercase tracking-wider">Backend Status</span>
+            {backend.kind === "checking" ? (
+              <span className="text-2xl font-bold text-slate-400">Checking…</span>
+            ) : backend.kind === "online" ? (
+              <span className="text-2xl font-bold text-emerald-400">Online</span>
             ) : (
-              <span className="text-2xl font-bold text-emerald-400">Healthy</span>
+              <span className="text-2xl font-bold text-rose-500">Offline</span>
             )}
+            <span className="text-[11px] text-slate-500 font-mono mt-1">Checked every 5 s</span>
             <div className="absolute -bottom-2 -right-2 text-white/[0.02]">
               <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
             </div>
@@ -27,27 +47,27 @@ export default function OverviewPage() {
           
           <div className="p-6 holo-panel border rounded-xl flex flex-col gap-2">
             <span className="text-slate-400 font-mono text-[11px] uppercase tracking-wider">DQN Agent</span>
-            {apiStatus === "running" ? (
-              <span className="text-2xl font-bold text-blue-400 animate-pulse">Evaluating...</span>
-            ) : (
-              <span className="text-2xl font-bold text-blue-400">Online & Active</span>
-            )}
-            <span className="text-[11px] text-slate-500 font-mono mt-1">Current Target: {decision?.selectedTarget.toUpperCase() || "N/A"}</span>
+            <span className={`text-2xl font-bold ${agent.cls}`}>{agent.text}</span>
+            <span className="text-[11px] text-slate-500 font-mono mt-1">
+              {decisionSource === "backend"
+                ? `Last decision: ${decision.selectedTarget.toUpperCase()}`
+                : "No backend decision yet this session"}
+            </span>
           </div>
 
           <div className="p-6 holo-panel border rounded-xl flex flex-col gap-2">
             <span className="text-slate-400 font-mono text-[11px] uppercase tracking-wider">Network Tier States</span>
             <div className="flex flex-col gap-1 mt-1">
               <div className="flex justify-between items-center text-[12px] font-mono">
-                <span className="text-slate-300">Local (CPU Free):</span>
-                <span className="text-slate-400">{state.device.cpuAvailablePct}%</span>
+                <span className="text-slate-300">Local (CPU Free, live):</span>
+                <span className="text-slate-400">{realLocalTelemetry ? `${state.device.cpuAvailablePct}%` : "—"}</span>
               </div>
               <div className="flex justify-between items-center text-[12px] font-mono">
-                <span className="text-slate-300">Edge (Load):</span>
+                <span className="text-slate-300">Edge (Load, simulated):</span>
                 <span className="text-emerald-400">{state.edge.cpuLoadPct}%</span>
               </div>
               <div className="flex justify-between items-center text-[12px] font-mono">
-                <span className="text-slate-300">Cloud (Load):</span>
+                <span className="text-slate-300">Cloud (Load, simulated):</span>
                 <span className="text-purple-400">{state.cloud.cpuLoadPct}%</span>
               </div>
             </div>
@@ -85,7 +105,7 @@ export default function OverviewPage() {
                         </td>
                         <td className="p-3 text-[11px] font-mono text-amber-400">{exec.latency_ms.toFixed(1)} ms</td>
                         <td className="p-3 text-[11px] font-mono text-cyan-400">{exec.reward.toFixed(4)}</td>
-                        <td className="p-3 text-[11px] font-mono text-emerald-400">{exec.status || "SUCCESS"}</td>
+                        <td className="p-3 text-[11px] font-mono text-emerald-400">{exec.status ?? "—"}</td>
                       </tr>
                     ))}
                  </tbody>

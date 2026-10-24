@@ -522,6 +522,8 @@ export const simulationStore = {
       evaluateAndUpdate();
     } catch (err) {
       console.warn("Could not fetch real local host telemetry:", err);
+      // A failed reading means the previous one is no longer live; drop it so the UI shows offline.
+      currentRealLocalTelemetry = null;
     } finally {
       currentTelemetryLoading = false;
       notify();
