@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { SimulationTransition } from "@/components/transitions/SimulationTransition";
 import { PerformanceMode } from "@/lib/three/PerformanceMode";
+import { LocalNetworkNotice } from "@/components/ui/LocalNetworkNotice";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,6 +41,8 @@ export default function RootLayout({
         {children}
         {/* Phase 11.3: Dedicated Reusable Cinematic Signal Transition Overlay */}
         <SimulationTransition />
+        {/* Hosted site only: explains Chrome's local-network permission when the backend can't be reached */}
+        <LocalNetworkNotice />
       </body>
     </html>
   );

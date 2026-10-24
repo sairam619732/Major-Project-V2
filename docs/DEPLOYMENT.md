@@ -235,7 +235,7 @@ After a few seconds it prints each node's status, for example:
    EDGE  online   http://26.18.104.7:8100  38.5 ms, 0.04 Gbps
    CLOUD online   https://edgeoffload-cloud.vercel.app  41.2 ms, 0.05 Gbps
 ```
-Open **https://edgeoffload-ai.vercel.app/devices** in Chrome. The first time, Chrome asks whether the site may **access devices on your local network**: click **Allow** (the site needs it to reach the backend on your laptop). All three tiers should show **LIVE**. Then go to `/simulation` and run tasks. Press **Ctrl+C** in the window to stop the backend.
+Open **https://edgeoffload-ai.vercel.app/devices** in Chrome. The first time, Chrome asks whether the site may **access devices on your local network**: click **Allow** (the site needs it to reach the backend on your laptop). Until you do, Chrome holds every request and the app shows "Backend offline", with an orange **Chrome needs your permission** notice at the bottom. If you missed or closed the prompt: click the icon left of the address bar → **Site settings** → **Local network access** → **Allow**, then reload. Chrome remembers it for this site. All three tiers should show **LIVE**. Then go to `/simulation` and run tasks. Press **Ctrl+C** in the window to stop the backend.
 
 **Backup (no internet for the site, or Chrome blocks it):** `npm run present` builds and runs the web app on your laptop too (about a minute on an i5); open <http://localhost:3000> instead. If port 3000 is taken: `npm run present -- --port=3001`.
 
