@@ -1,5 +1,5 @@
 // Test referential stability of all simulationStore getters, especially getWorkloadPayload()
-import { simulationStore } from "../../src/lib/simulation/simulationState.ts";
+import { simulationStore } from "../../src/lib/simulation/simulationState";
 
 console.log("Testing simulationStore snapshot stability...");
 

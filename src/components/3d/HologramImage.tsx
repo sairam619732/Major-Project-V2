@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable react-hooks/immutability -- textures from useTexture are configured once before first upload. */
+ 
 
 import { useEffect, useMemo } from "react";
 import { useTexture } from "@react-three/drei";

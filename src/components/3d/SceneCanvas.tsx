@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useSyncExternalStore } from "react";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import { ComputingDevice } from "./ComputingDevice";
@@ -15,12 +15,11 @@ import { DecisionVisualization } from "./DecisionVisualization";
 import { AdaptiveQuality, canvasQuality } from "@/lib/three/renderQuality";
 import { HologramLens } from "@/lib/three/HologramLens";
 
-export function SceneCanvas() {
-  const [mounted, setMounted] = useState(false);
+const subscribeNever = () => () => {};
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+export function SceneCanvas() {
+  // false while server-rendering, true in the browser: the WebGL canvas only renders client-side.
+  const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
 
   if (!mounted) {
     return null;

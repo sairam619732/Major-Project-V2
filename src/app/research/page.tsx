@@ -19,23 +19,34 @@ export default function ResearchPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetchBenchmarkReport();
-      setData(res);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Experimental data unavailable.";
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
+  // Fetches the report; state is set only after the request settles (and not after unmount).
+  const fetchReport = useCallback((isCancelled: () => boolean = () => false) => {
+    return fetchBenchmarkReport()
+      .then((res) => {
+        if (!isCancelled()) setData(res);
+      })
+      .catch((err: unknown) => {
+        if (!isCancelled()) setError(err instanceof Error ? err.message : "Experimental data unavailable.");
+      })
+      .finally(() => {
+        if (!isCancelled()) setLoading(false);
+      });
   }, []);
 
+  // Refresh / retry buttons.
+  const loadData = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return fetchReport();
+  }, [fetchReport]);
+
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let cancelled = false;
+    fetchReport(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchReport]);
 
   return (
     <div className={styles.researchPage}>
@@ -100,7 +111,7 @@ export default function ResearchPage() {
         {error && !data && (
           <div className="my-24 p-12 text-center border border-dashed border-red-500/25 rounded-[2px] bg-red-950/10 space-y-4">
             <span className="font-mono text-xs uppercase tracking-[0.25em] text-red-400 block font-semibold">
-              // EXPERIMENTAL DATA UNAVAILABLE
+              {"// EXPERIMENTAL DATA UNAVAILABLE"}
             </span>
             <p className="text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
               The benchmark results could not be retrieved from the backend API or local dataset.

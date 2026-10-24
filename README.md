@@ -60,7 +60,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full architectural document
 ## 3. Technology Stack
 
 ### Frontend & UI
-- **Framework**: Next.js 16.3.6 (App Router with Turbopack)
+- **Framework**: Next.js 16.4.3 (App Router with Turbopack)
 - **UI Library**: React 19
 - **3D Graphics & Canvas**: Three.js, React Three Fiber (`@react-three/fiber`), `@react-three/drei`
 - **Typography & Styling**: TailwindCSS, CSS Modules, Google Fonts (`Geist`, `Geist Mono`, `Space Grotesk`)
@@ -259,6 +259,14 @@ cd backend
 The FastAPI backend will start at `http://127.0.0.1:8000`. On its own it is the only server the project needs: a tier with no node connected is simulated (the workload runs in-process on the local machine and its network and queueing costs come from the cost model).  
 Interactive Swagger API documentation is available at `http://127.0.0.1:8000/docs`.
 
+### Task limits
+Sized for ordinary laptops and free CPU servers, and checked in the browser, the backend and every node:
+- **Image:** one photo (JPG, PNG or WebP), up to 10 MB.
+- **Image batch:** up to 10 photos at a time, each up to 10 MB.
+- **Video:** one video, up to 10 seconds and 50 MB, analysed at 1 frame per second (so at most 10 frames). Needs **ffmpeg** on the machine that runs it (Windows: `winget install Gyan.FFmpeg`); without it the task is refused with a clear message.
+
+The numbers live in `backend/app/services/workload_limits.py` and `src/lib/simulation/workloadLimits.ts`.
+
 ### Edge and cloud nodes (optional)
 The edge and cloud tiers can be real machines running the offloading node (`backend/node`). A node reports its own CPU load, memory and task queue, and runs the object detector on tasks sent to it. The backend checks each node every 3 s, measures the real network latency (round trip) and bandwidth (a timed 512 KB upload every 30 s), feeds these to the DQN, and sends the task to the node when the DQN picks that tier. A node that stops answering is shown as offline and gets no tasks.
 
@@ -308,6 +316,13 @@ The tablet, edge rack and cloud datacenter are shown as pre-rendered images (`pu
 
 ## 12. Running Tests
 
+### Everything at once
+From the project root, one command runs the type-check, lint, every frontend and backend test suite, the production build, and the live API and end-to-end tests (it starts the backend on port 8000 if it isn't already running) and prints a pass/fail summary:
+```bash
+npm run check
+```
+`npm run check:quick` skips the production build and the live tests. The individual suites are listed below.
+
 ### Backend Unit & Integration Tests
 ```powershell
 cd backend
@@ -326,6 +341,12 @@ cd backend
 # 5. Offloading Node & Node Monitor Suite
 .\.venv\Scripts\python.exe -m tests.test_nodes
 
+# 5b. Task Limits Suite (video checks need ffmpeg)
+.\.venv\Scripts\python.exe -m tests.test_workload_limits
+
+# 5c. Input Handling Suite (broken images, oversized uploads, what-if zeros, training switch)
+.\.venv\Scripts\python.exe -m tests.test_hardening
+
 # 6. Full Backend API Regression Suite (requires running server)
 .\.venv\Scripts\python.exe -m tests.test_api
 cd ..
@@ -339,6 +360,11 @@ node tests/unit/test_phase16.mjs
 
 # 2. End-to-End Frontend-Backend Integration (requires running server)
 node tests/e2e/test_integration.mjs
+
+# 3. TypeScript unit tests (run with tsx, installed as a dev dependency)
+npx tsx tests/unit/test_store_snapshot_stability.ts
+npx tsx src/lib/offloading/__tests__/testDecisionEngine.ts
+npx tsx src/lib/simulation/__tests__/testSimulationPresets.ts
 ```
 
 ---
@@ -377,6 +403,7 @@ To rebuild the training dataset and its preprocessed splits, see [data/README.md
 | `GET` | `/api/optimization/benchmark-report` | Full 5-seed empirical benchmark report (JSON) |
 | `GET` | `/api/optimization/evaluation-results` | Scientific evaluation summary and seed variance |
 | `GET` | `/api/optimization/training-history` | 200-episode training trajectory (loss, epsilon, reward) |
+| `POST` | `/api/optimization/train` | Retrains the DQN and overwrites the checkpoint. Off by default (403); set `ENABLE_TRAINING_API=1` in `backend/.env` to allow it |
 
 See [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) for full request/response schemas.
 

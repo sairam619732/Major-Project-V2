@@ -1,6 +1,10 @@
 """FastAPI router for DQN offloading optimization, training, and benchmarking."""
 
+import asyncio
+import os
+
 from fastapi import APIRouter, status, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from app.models.optimization import (
     OptimizationRequest,
     OptimizationDecisionResponse,
@@ -15,6 +19,14 @@ from app.ml.environment import state_to_vector
 from app.ml.baselines import evaluate_baselines
 
 router = APIRouter(prefix="/optimization", tags=["Optimization (DQN)"])
+
+# Training overwrites the shipped checkpoint, so the endpoint is off unless ENABLE_TRAINING_API=1.
+# (Train from the command line instead: python -m app.ml.train)
+_training_lock = asyncio.Lock()
+
+
+def _training_enabled() -> bool:
+    return os.getenv("ENABLE_TRAINING_API", "").strip().lower() in ("1", "true", "yes")
 
 
 @router.post(
@@ -51,13 +63,23 @@ async def get_optimization_decision(payload: OptimizationRequest) -> Optimizatio
 )
 async def train_dqn_endpoint(req: TrainingRequest) -> TrainingResponse:
     """Executes offline DQN training loop and reloads the inference engine with the new checkpoint."""
+    if not _training_enabled():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Training over the API is turned off (it overwrites the trained model). "
+            "Set ENABLE_TRAINING_API=1 in backend/.env to allow it, or run: python -m app.ml.train",
+        )
+    if _training_lock.locked():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A training run is already in progress.")
     cfg = DQNConfig(
         episodes=req.episodes,
         seed=req.seed,
         learning_rate=req.learning_rate,
     )
     try:
-        results = run_training_loop(config=cfg, weights=req.weights)
+        async with _training_lock:
+            # Training takes minutes of CPU: keep it off the event loop so the API stays responsive.
+            results = await run_in_threadpool(run_training_loop, config=cfg, weights=req.weights)
         # Reload the inference service with the newly trained checkpoint
         inference_service.reload()
         return TrainingResponse(**results)

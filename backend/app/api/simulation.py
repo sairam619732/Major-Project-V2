@@ -1,11 +1,11 @@
-import io
 import time
 import json
 import platform
 from typing import Optional, Any, List, Tuple
-from PIL import Image
+import httpx
 import psutil
 from fastapi import APIRouter, status, UploadFile, File, Form, HTTPException
+from fastapi.concurrency import run_in_threadpool
 
 from app.models.simulation import (
     SimulationRequest,
@@ -19,6 +19,7 @@ from app.models.system import LocalNodeState, EdgeNodeState, CloudNodeState
 from app.services.evaluator import evaluate_simulation
 from app.services.cv_executor import cv_executor
 from app.services.remote_nodes import node_monitor
+from app.services.workload_limits import WorkloadError, check_workload, max_file_bytes, read_upload
 from app.ml.inference import inference_service
 from app.ml.environment import compute_action_metrics
 
@@ -158,6 +159,17 @@ def _resolve_form_val(val: Any, default: Any) -> Any:
     return val
 
 
+def _number(val: Any, default: float, low: float, high: Optional[float] = None) -> float:
+    """A what-if value as a float within [low, high]; missing or unreadable values use the default.
+    (A real 0, e.g. an empty edge queue, is kept: it is not replaced by the default.)"""
+    try:
+        num = float(val)
+    except (TypeError, ValueError):
+        num = default
+    num = max(low, num)
+    return min(high, num) if high is not None else num
+
+
 @router.post(
     "/execute",
     response_model=SimulationExecuteResponse,
@@ -176,7 +188,7 @@ async def execute_simulation_task(
     workload_type: Optional[str] = Form("IMAGE"),
     task_id: Optional[str] = Form("TASK_CV_001"),
     deadline_ms: Optional[float] = Form(None),
-    priority: Optional[int] = Form(3),
+    priority: Optional[int] = Form(None),
     edge_cpu_load: Optional[float] = Form(40.0),
     edge_task_queue: Optional[int] = Form(2),
     edge_network_latency: Optional[float] = Form(14.5),
@@ -201,22 +213,25 @@ async def execute_simulation_task(
             detail="No files provided for execution.",
         )
 
+    w_type = _resolve_form_val(workload_type, "IMAGE").upper()
     files_data: List[Tuple[str, bytes, str]] = []
     total_bytes = 0
     for f in actual_files:
         if not f.filename:
             continue
         try:
-            content = await f.read()
-            if not content:
-                continue
-            files_data.append((f.filename, content, f.content_type or "application/octet-stream"))
-            total_bytes += len(content)
+            content = await read_upload(f, max_file_bytes(w_type))
+        except WorkloadError as exc:
+            raise HTTPException(status_code=413, detail=str(exc))
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to read file {f.filename}: {str(e)}",
             )
+        if not content:
+            continue
+        files_data.append((f.filename, content, f.content_type or "application/octet-stream"))
+        total_bytes += len(content)
 
     if not files_data:
         raise HTTPException(
@@ -224,13 +239,18 @@ async def execute_simulation_task(
             detail="Uploaded file payload is empty.",
         )
 
-    w_type = _resolve_form_val(workload_type, "IMAGE").upper()
+    # One photo, up to 10 photos, or a video of up to 10 s (see workload_limits.py).
+    # Runs off the event loop: reading a video's length starts ffprobe.
+    try:
+        await run_in_threadpool(check_workload, w_type, [(name, data) for name, data, _ in files_data])
+    except WorkloadError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     total_size_mb = max(0.01, round(total_bytes / (1024 * 1024), 3))
 
     # STEP B: Extract workload computational demands
     img_meta = None
     if w_type == "IMAGE":
-        img_meta = cv_executor.extract_image_metadata(files_data[0][1])
+        img_meta = await run_in_threadpool(cv_executor.extract_image_metadata, files_data[0][1])
         data_size_mb = img_meta["size_mb"]
         cpu_demand = img_meta["estimated_cpu_demand"]
         mem_demand = img_meta["estimated_memory_demand"]
@@ -240,7 +260,7 @@ async def execute_simulation_task(
         cpu_demand = min(95.0, max(35.0, round(40.0 + min(count, 10) * 3.0 + total_size_mb * 1.5, 1)))
         mem_demand = min(90.0, max(30.0, round(35.0 + min(count, 10) * 3.0 + total_size_mb * 1.2, 1)))
         try:
-            img_meta = cv_executor.extract_image_metadata(files_data[0][1])
+            img_meta = await run_in_threadpool(cv_executor.extract_image_metadata, files_data[0][1])
         except Exception:
             pass
     else:  # VIDEO
@@ -250,8 +270,8 @@ async def execute_simulation_task(
 
     # Resolve parameters from Form objects or direct values
     task_id = _resolve_form_val(task_id, "TASK_CV_001")
-    deadline_ms = _resolve_form_val(deadline_ms, 60.0)
-    priority = _resolve_form_val(priority, 3)
+    deadline_ms = _resolve_form_val(deadline_ms, None)
+    priority = _resolve_form_val(priority, None)
     edge_cpu_load = _resolve_form_val(edge_cpu_load, 40.0)
     edge_task_queue = _resolve_form_val(edge_task_queue, 2)
     edge_network_latency = _resolve_form_val(edge_network_latency, 14.5)
@@ -292,22 +312,25 @@ async def execute_simulation_task(
         except Exception:
             pass
 
-    actual_deadline = float(deadline_ms) if deadline_ms is not None and float(deadline_ms) > 0 else 60.0
+    actual_deadline = _number(deadline_ms, 60.0, 0.0)
+    if actual_deadline <= 0:
+        actual_deadline = 60.0
+    actual_priority = int(_number(priority, 3, 1, 5))
     actual_task_id = str(task_id) if task_id else f"TASK_CV_{int(time.time() % 10000):04d}"
 
     # Build node states
     local_state = real_local_state()
     edge_state = EdgeNodeState(
-        cpu_load=max(0.0, min(100.0, float(edge_cpu_load or 40.0))),
-        task_queue=max(0, int(edge_task_queue or 2)),
-        network_latency=max(0.1, float(edge_network_latency or 14.5)),
-        bandwidth=max(0.1, float(edge_bandwidth or 1.0)),
+        cpu_load=_number(edge_cpu_load, 40.0, 0.0, 100.0),
+        task_queue=int(_number(edge_task_queue, 2, 0)),
+        network_latency=_number(edge_network_latency, 14.5, 0.1),
+        bandwidth=_number(edge_bandwidth, 1.0, 0.1),
     )
     cloud_state = CloudNodeState(
-        cpu_load=max(0.0, min(100.0, float(cloud_cpu_load or 25.0))),
-        task_queue=max(0, int(cloud_task_queue or 5)),
-        network_latency=max(0.1, float(cloud_network_latency or 65.0)),
-        bandwidth=max(0.1, float(cloud_bandwidth or 10.0)),
+        cpu_load=_number(cloud_cpu_load, 25.0, 0.0, 100.0),
+        task_queue=int(_number(cloud_task_queue, 5, 0)),
+        network_latency=_number(cloud_network_latency, 65.0, 0.1),
+        bandwidth=_number(cloud_bandwidth, 10.0, 0.1),
     )
     # Live nodes replace the what-if values with real measurements.
     edge_state = node_monitor.live_state("edge") or edge_state
@@ -320,7 +343,7 @@ async def execute_simulation_task(
         cpu_demand_percent=cpu_demand,
         memory_demand_percent=mem_demand,
         deadline_ms=actual_deadline,
-        priority=priority or 3,
+        priority=actual_priority,
     )
 
     # STEP C: Call EXISTING DQN decision logic (Autonomous Routing)
@@ -361,6 +384,15 @@ async def execute_simulation_task(
     if remote_key and node_monitor.is_live(remote_key):
         try:
             remote_res = await node_monitor.execute(remote_key, files_data, w_type, actual_task_id)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == status.HTTP_400_BAD_REQUEST:
+                # The node rejected the task itself (e.g. no ffmpeg there): report it, don't retry locally.
+                try:
+                    detail = exc.response.json().get("detail", "The node could not process this task.")
+                except ValueError:
+                    detail = "The node could not process this task."
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{decision} node: {detail}")
+            routing_note = f"The {decision.lower()} node failed ({type(exc).__name__}), so the task ran locally."
         except Exception as exc:
             routing_note = f"The {decision.lower()} node failed ({type(exc).__name__}), so the task ran locally."
 
@@ -376,11 +408,21 @@ async def execute_simulation_task(
         total_latency_ms = remote_res["round_trip_ms"]
         network_transfer_ms = round(max(0.0, total_latency_ms - remote_res.get("server_elapsed_ms", processing_time_ms)), 2)
     else:
-        workload_res = cv_executor.process_workload(
-            workload_type=w_type,
-            files_data=[(name, data) for name, data, _ in files_data],
-            tier="LOCAL",
-        )
+        try:
+            # Detection is CPU heavy: run it off the event loop so telemetry and node probes keep working.
+            workload_res = await run_in_threadpool(
+                cv_executor.process_workload,
+                workload_type=w_type,
+                files_data=[(name, data) for name, data, _ in files_data],
+                tier="LOCAL",
+            )
+        except WorkloadError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Object detection failed: {type(exc).__name__}: {exc}"[:300],
+            )
         exec_worker = "local-host-device"
         if decision == "LOCAL" or routing_note:
             exec_env = "LOCAL (On-Device CPU)"
@@ -397,7 +439,6 @@ async def execute_simulation_task(
     if routing_note:
         env_desc = f"{routing_note} {env_desc}"
     detections = workload_res["detections"]
-    detection_count = workload_res["detection_count"]
     annotated_b64 = workload_res.get("annotated_image_base64")
     batch_items = workload_res.get("batch_items", [])
     processed_count = workload_res.get("processed_count", 1)

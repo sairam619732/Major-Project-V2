@@ -38,10 +38,11 @@ export function SparseDeepSpaceStars() {
     const col = new Float32Array(count * 3);
 
     // Seeded-style pseudo random for consistent pleasing distribution with cosmic voids
-    let seed = 42;
+    // Seed kept in a local object: same fixed sequence on every render.
+    const rng = { seed: 42 };
     const random = () => {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
+      rng.seed = (rng.seed * 9301 + 49297) % 233280;
+      return rng.seed / 233280;
     };
 
     for (let i = 0; i < count; i++) {

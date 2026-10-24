@@ -362,7 +362,7 @@ export function SimulationCompactControls() {
               ) : (
                 <div className="flex items-center justify-between gap-3 p-2.5 rounded bg-cyan-950/30 border border-cyan-500/40">
                   <div className="flex items-center gap-3 min-w-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    { }
                     <img
                       src={uploadedImage.previewUrl}
                       alt="Upload thumbnail"
@@ -452,7 +452,7 @@ export function SimulationCompactControls() {
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           {img.previewUrl && (
-                            /* eslint-disable-next-line @next/next/no-img-element */
+                             
                             <img
                               src={img.previewUrl}
                               alt={img.name}
@@ -1127,7 +1127,7 @@ export function SimulationBottomResultStrip() {
               <div className="lg:col-span-5 flex flex-col gap-1.5">
                 {executionDetails.annotated_image_base64 ? (
                   <div className="relative group rounded border border-cyan-500/60 overflow-hidden bg-black/60 shadow-[0_0_15px_rgba(6,182,212,0.25)]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    { }
                     <img
                       src={executionDetails.annotated_image_base64}
                       alt="SSD MobileNet V3 Object Detection with Bounding Boxes"

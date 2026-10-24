@@ -5,15 +5,6 @@ import { nodeSource } from "@/services/apiClient";
 
 import { useEffect, useState } from "react";
 
-interface ReadOnlyTelemetryProps {
-  label: string;
-  value: number | string;
-  unit: string;
-  accentColor: string;
-  pct?: number;
-  statusBadge?: string;
-  statusColor?: string;
-}
 
 function CircularMetric({ label, value, color, inverse = false }: { label: string; value: number | null; color: string; inverse?: boolean }) {
   // null = no real reading yet: empty ring and a dash instead of a made-up number.

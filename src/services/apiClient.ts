@@ -350,7 +350,8 @@ export async function executeTaskOffloading(
         state: SimulationState;
       },
   stateFallback?: SimulationState,
-  timeoutMs = 45000
+  // Above the backend's 120 s node timeout, so a slow node reports its own error first.
+  timeoutMs = 130000
 ): Promise<SimulationExecutionResult> {
   const baseUrl = getBackendBaseUrl();
   const controller = new AbortController();
@@ -380,10 +381,8 @@ export async function executeTaskOffloading(
     const item = rawFiles[i];
     const defaultName = workloadType === "VIDEO" ? "video.mp4" : `task_image_${i + 1}.jpg`;
     const fname = item instanceof File ? item.name : defaultName;
+    // Sent once, as "files" (the backend's single "file" field is only a fallback for other callers).
     formData.append("files", item, fname);
-    if (i === 0) {
-      formData.append("file", item, fname);
-    }
   }
 
   formData.append("workload_type", workloadType);

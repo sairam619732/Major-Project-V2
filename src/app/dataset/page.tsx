@@ -2,8 +2,18 @@
 import { useEffect, useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
+type DatasetRow = Record<string, string>;
+
+/** Summary returned by /api/dataset. */
+interface DatasetSummary {
+  meta: { totalSamples: number; numFeatures: number; headers: string[] };
+  distribution: { optimalAction: { LOCAL: number; EDGE: number; CLOUD: number }; taskType: Record<string, number> };
+  rewards: { min: number; max: number; avg: number };
+  preview: DatasetRow[];
+}
+
 export default function DatasetPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<DatasetSummary | null>(null);
   const [loading, setLoading] = useState(true);
   
   // Table state
@@ -15,7 +25,8 @@ export default function DatasetPage() {
 
   useEffect(() => {
     fetch('/api/dataset')
-      .then(res => res.json())
+      // A failed request (404 / 500) shows the error state instead of a half-filled page.
+      .then(res => (res.ok ? res.json() : null))
       .then(json => {
         setData(json);
         setLoading(false);
@@ -28,7 +39,7 @@ export default function DatasetPage() {
 
   const filteredPreview = useMemo(() => {
     if (!data?.preview) return [];
-    return data.preview.filter((row: any) => {
+    return data.preview.filter((row: DatasetRow) => {
       const matchSearch = Object.values(row).some(val => 
         String(val).toLowerCase().includes(search.toLowerCase())
       );
@@ -67,7 +78,7 @@ export default function DatasetPage() {
 
        {loading ? (
          <div className="flex items-center justify-center h-64 text-slate-400 font-mono">Loading dataset...</div>
-       ) : !data || data.error ? (
+       ) : !data ? (
          <div className="flex items-center justify-center h-64 text-rose-400 font-mono">Error loading dataset</div>
        ) : (
          <div className="flex flex-col gap-8">
@@ -97,7 +108,7 @@ export default function DatasetPage() {
               <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
                  <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase">Task Type Distribution</h2>
                  <div className="flex flex-col gap-3 mt-2">
-                   {Object.entries(data.distribution.taskType).map(([type, count]: [string, any]) => {
+                   {Object.entries(data.distribution.taskType).map(([type, count]: [string, number]) => {
                      const pct = Math.round((count / data.meta.totalSamples) * 100);
                      return (
                        <div key={type} className="flex flex-col gap-1">
@@ -261,7 +272,7 @@ export default function DatasetPage() {
                            <td colSpan={14} className="p-8 text-center text-slate-500 font-mono text-[12px]">No samples match the filters in the current preview.</td>
                          </tr>
                        ) : (
-                         currentRows.map((row: any, i: number) => (
+                         currentRows.map((row: DatasetRow, i: number) => (
                            <tr key={i} className="border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors">
                              <td className="p-3 text-[11px] font-mono text-slate-400">{row.sample_id}</td>
                              <td className="p-3 text-[11px] font-mono text-blue-300 font-bold">{row.task_type}</td>

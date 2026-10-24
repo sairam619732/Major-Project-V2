@@ -1,0 +1,39 @@
+# Runs the project checks (scripts/check.mjs) on every push and pull request.
+name: Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install ffmpeg (video tasks)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install backend dependencies (CPU PyTorch)
+        run: |
+          python -m venv backend/.venv
+          backend/.venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          backend/.venv/bin/pip install -r backend/requirements.txt
+
+      - name: Run all checks
+        run: npm run check

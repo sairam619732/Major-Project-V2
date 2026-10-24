@@ -25,6 +25,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
 from app.services.cv_executor import cv_executor
+from app.services.workload_limits import WorkloadError, check_workload, max_file_bytes, read_upload
 
 NODE_TIER = os.getenv("NODE_TIER", "EDGE").upper()
 NODE_ID = os.getenv("NODE_ID", f"{NODE_TIER.lower()}-{socket.gethostname().lower()}")
@@ -45,6 +46,9 @@ async def require_token(request: Request, call_next):
         if not hmac.compare_digest(sent, NODE_TOKEN):
             return JSONResponse({"detail": "Missing or wrong X-Node-Token"}, status_code=status.HTTP_401_UNAUTHORIZED)
     return await call_next(request)
+
+# The backend's bandwidth probe sends 512 KB; refuse anything much larger.
+ECHO_MAX_BYTES = 2 * 1024 * 1024
 
 # Tasks received but not finished yet: the node's real queue length.
 _queue_lock = threading.Lock()
@@ -87,8 +91,12 @@ async def node_status():
 @app.post("/echo", tags=["Status"])
 async def echo(request: Request):
     """Bandwidth probe: receives a block of bytes and reports how many arrived."""
-    body = await request.body()
-    return {"received_bytes": len(body)}
+    received = 0
+    async for chunk in request.stream():
+        received += len(chunk)
+        if received > ECHO_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Probe block too large.")
+    return {"received_bytes": received}
 
 
 @app.post("/execute", tags=["Execution"])
@@ -101,7 +109,11 @@ async def execute(
     """Runs object detection on the uploaded image(s) or video on this machine."""
     files_data: List[Tuple[str, bytes]] = []
     for f in files or []:
-        content = await f.read()
+        try:
+            # Stops reading once a file is over the limit, so huge uploads never fill memory.
+            content = await read_upload(f, max_file_bytes(workload_type))
+        except WorkloadError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
         if content:
             files_data.append((f.filename or "file", content))
     if not files_data:
@@ -110,6 +122,8 @@ async def execute(
     _queue_change(+1)
     started = time.perf_counter()
     try:
+        # Same limits as the backend: one photo, up to 10 photos, or a video of up to 10 s.
+        await run_in_threadpool(check_workload, workload_type, files_data)
         # Detection is CPU/GPU heavy: run it off the event loop so /status stays responsive.
         result = await run_in_threadpool(
             cv_executor.process_workload,
@@ -118,6 +132,8 @@ async def execute(
             threshold=confidence_threshold,
             tier=NODE_TIER,
         )
+    except WorkloadError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     finally:
         _queue_change(-1)
 

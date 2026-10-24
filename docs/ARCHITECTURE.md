@@ -77,7 +77,7 @@
 ## 2. Core Architectural Components
 
 ### 2.1 Presentation & Visualization Tier (Frontend)
-- **Framework**: Next.js 16.3.6 (Turbopack bundler) with React 19.
+- **Framework**: Next.js 16.4.3 (Turbopack bundler) with React 19.
 - **Styling**: TailwindCSS with CSS custom properties and custom editorial design system (`Geist`, `Geist Mono`, and `Space Grotesk` typography).
 - **3D Spatial Visualization**: Three.js, React Three Fiber (`@react-three/fiber`), and Drei (`@react-three/drei`).
   - Choreographed camera movements across Local, Edge, and Cloud positions.

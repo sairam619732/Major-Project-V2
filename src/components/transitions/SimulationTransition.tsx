@@ -4,7 +4,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { transitionStore, TransitionMode } from "@/lib/transition/transitionStore";
+import { transitionStore } from "@/lib/transition/transitionStore";
 
 interface Particle {
   vx: number;
@@ -19,7 +19,6 @@ export function SimulationTransition() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isActive, setIsActive] = useState(false);
   const particlesRef = useRef<Particle[]>([]);
-  const animFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     return transitionStore.subscribe((progress, isTrans, mode) => {

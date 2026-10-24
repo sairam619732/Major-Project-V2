@@ -14,7 +14,7 @@
 //
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { scrollState } from "@/store/scrollStore";
@@ -466,6 +466,75 @@ export function CloudToDecisionCosmic() {
     { u: 0.65, angle: 4.4, radius: 0.86, phase: 4.2, color: "#dfbf74" }, // Muted gold in Transit->Decision
   ], []);
 
+  // Beacon materials: made once (not on every render) and freed on unmount.
+  const beaconMaterials = useMemo(
+    () =>
+      beaconConfigs.map((cfg) => ({
+        core: new THREE.MeshStandardMaterial({
+          color: "#ffffff",
+          emissive: cfg.color,
+          emissiveIntensity: 2.0,
+          roughness: 0.12,
+          transparent: true,
+          opacity: 0,
+        }),
+        halo: new THREE.MeshBasicMaterial({
+          map: heroStarHaloTexture || undefined,
+          color: cfg.color,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      })),
+    [beaconConfigs, heroStarHaloTexture]
+  );
+  const goldBeaconMaterials = useMemo(
+    () =>
+      goldBeaconConfigs.map((cfg) => ({
+        core: new THREE.MeshStandardMaterial({
+          color: "#ffffff",
+          emissive: cfg.color,
+          emissiveIntensity: 1.3,
+          roughness: 0.15,
+          transparent: true,
+          opacity: 0,
+        }),
+        halo: new THREE.MeshBasicMaterial({
+          map: starGlowTexture || undefined,
+          color: cfg.color,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      })),
+    [goldBeaconConfigs, starGlowTexture]
+  );
+  useEffect(() => {
+    beaconCoreMatsRef.current = beaconMaterials.map((m) => m.core);
+    beaconHaloMatsRef.current = beaconMaterials.map((m) => m.halo);
+    goldBeaconCoreMatsRef.current = goldBeaconMaterials.map((m) => m.core);
+    goldBeaconHaloMatsRef.current = goldBeaconMaterials.map((m) => m.halo);
+    return () => {
+      [...beaconMaterials, ...goldBeaconMaterials].forEach((m) => {
+        m.core.dispose();
+        m.halo.dispose();
+      });
+    };
+  }, [beaconMaterials, goldBeaconMaterials]);
+
+  // Reused every frame instead of allocating new vectors/colours 60 times a second.
+  const frameScratch = useMemo(
+    () => ({
+      tempPt: new THREE.Vector3(),
+      tempCol: new THREE.Color(),
+      colViolet: new THREE.Color("#c084fc"),
+      colCyan: new THREE.Color("#38bdf8"),
+    }),
+    []
+  );
+
   // Frame Update Loop: scrubbed smoothly by scrollState.visualProgress
   useFrame((state) => {
     const fullP = Math.max(scrollState.visualProgress, 0);
@@ -499,10 +568,7 @@ export function CloudToDecisionCosmic() {
     const quantaPosAttr = quantaGeo.attributes.position as THREE.BufferAttribute;
     const quantaColAttr = quantaGeo.attributes.color as THREE.BufferAttribute;
     const qCount = NUM_DATA_QUANTA;
-    const tempPt = new THREE.Vector3();
-    const tempCol = new THREE.Color();
-    const colViolet = new THREE.Color("#c084fc");
-    const colCyan = new THREE.Color("#38bdf8");
+    const { tempPt, tempCol, colViolet, colCyan } = frameScratch;
 
     for (let i = 0; i < qCount; i++) {
       const offset = i / qCount;
@@ -671,27 +737,7 @@ export function CloudToDecisionCosmic() {
       <points ref={distantPointsRef} geometry={distantGeo} material={distantMat} />
 
       {/* 6. Six Restrained Hero Beacon Stars (White -> Cyan -> Blue -> Violet) */}
-      {beaconConfigs.map((cfg, i) => {
-        const coreMat = new THREE.MeshStandardMaterial({
-          color: "#ffffff",
-          emissive: cfg.color,
-          emissiveIntensity: 2.0,
-          roughness: 0.12,
-          transparent: true,
-          opacity: 0,
-        });
-        const haloMat = new THREE.MeshBasicMaterial({
-          map: heroStarHaloTexture || undefined,
-          color: cfg.color,
-          transparent: true,
-          opacity: 0,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-        });
-
-        beaconCoreMatsRef.current[i] = coreMat;
-        beaconHaloMatsRef.current[i] = haloMat;
-
+      {beaconMaterials.map(({ core: coreMat, halo: haloMat }, i) => {
         return (
           <group key={`hero-beacon-${i}`}>
             <mesh
@@ -713,27 +759,7 @@ export function CloudToDecisionCosmic() {
       })}
 
       {/* 7. Two Subtle Warm Gold Accent Stars (#D6B36A to #E8C873) */}
-      {goldBeaconConfigs.map((cfg, i) => {
-        const coreMat = new THREE.MeshStandardMaterial({
-          color: "#ffffff",
-          emissive: cfg.color,
-          emissiveIntensity: 1.3,
-          roughness: 0.15,
-          transparent: true,
-          opacity: 0,
-        });
-        const haloMat = new THREE.MeshBasicMaterial({
-          map: starGlowTexture || undefined,
-          color: cfg.color,
-          transparent: true,
-          opacity: 0,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-        });
-
-        goldBeaconCoreMatsRef.current[i] = coreMat;
-        goldBeaconHaloMatsRef.current[i] = haloMat;
-
+      {goldBeaconMaterials.map(({ core: coreMat, halo: haloMat }, i) => {
         return (
           <group key={`gold-beacon-${i}`}>
             <mesh

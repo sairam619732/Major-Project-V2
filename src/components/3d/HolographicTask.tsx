@@ -106,10 +106,6 @@ export function HolographicTask() {
     return x * x * (3 - 2 * x);
   };
 
-  const smootherstep = (min: number, max: number, value: number) => {
-    const x = Math.max(0, Math.min(1, (value - min) / (max - min)));
-    return x * x * x * (x * (x * 6 - 15) + 10);
-  };
 
   // 1. Core Material (Small glowing crystalline data node)
   const coreMaterial = useMemo(

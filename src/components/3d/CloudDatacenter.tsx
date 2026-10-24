@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable react-hooks/immutability -- R3F owns these mutable Three.js objects; frame callbacks update GPU resources without React renders. */
+ 
 
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";

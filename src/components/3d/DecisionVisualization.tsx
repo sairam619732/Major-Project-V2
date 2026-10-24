@@ -9,12 +9,12 @@
 
 "use client";
 
-/* eslint-disable react-hooks/immutability -- R3F owns these mutable Three.js objects; frame callbacks update GPU resources without React renders. */
+ 
 
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import type { Group, Points, MeshBasicMaterial, Mesh } from "three";
+import type { Group, Points, Mesh } from "three";
 import { scrollState } from "@/store/scrollStore";
 import {
   evaluateOffloadingDecision,
@@ -120,7 +120,6 @@ export function DecisionVisualization() {
 
   // Halo Mesh Ref
   const haloMeshRef = useRef<Mesh>(null);
-  const edgeHaloMatRef = useRef<MeshBasicMaterial>(null);
 
   // Streaming Quanta Particles along the selected path
   const quantaRef = useRef<Points>(null);
@@ -145,7 +144,6 @@ export function DecisionVisualization() {
   );
 
   // 3. Dedicated Spatial Coordinates around Centered TASK_001
-  const decisionCenter = useMemo(() => new THREE.Vector3(26.00, 0.40, 0.00), []);
 
   // Balanced Triangular Constellation (Phase 10.2.2):
   // LOCAL: Upper-center, upright with front OLED screen facing camera
@@ -189,9 +187,6 @@ export function DecisionVisualization() {
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.flipY = true;
-
-    tabletCanvasRef.current = canvas;
-    tabletTextureRef.current = tex;
     return tex;
   }, [decisionResult.candidateScores.local.score]);
 
@@ -200,13 +195,15 @@ export function DecisionVisualization() {
     () => (tabletScreenTexture ? createHologramScreenMaterial(tabletScreenTexture, "#fcd34d") : undefined),
     [tabletScreenTexture]
   );
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // The live redraw (useFrame) paints onto this canvas/texture.
+    tabletCanvasRef.current = (tabletScreenTexture?.image as HTMLCanvasElement | undefined) ?? null;
+    tabletTextureRef.current = tabletScreenTexture;
+    return () => {
       tabletScreenTexture?.dispose();
       screenMaterial?.dispose();
-    },
-    [tabletScreenTexture, screenMaterial]
-  );
+    };
+  }, [tabletScreenTexture, screenMaterial]);
 
   // 6. Dynamic Evaluation Line Geometries (Updated dynamically each frame to touch models)
   const localLineGeo = useMemo(() => {

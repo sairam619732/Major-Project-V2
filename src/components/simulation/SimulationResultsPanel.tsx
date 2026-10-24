@@ -5,22 +5,18 @@ import { useSimulationState } from "@/lib/simulation/simulationState";
 export function SimulationResultsPanel() {
   const {
     state,
-    decision,
-    runSimulation,
     apiStatus,
     apiError,
     uploadedImage,
     workloadType,
     batchImages,
     uploadedVideo,
-    videoMetadata,
     executionStage,
     executionDetails,
     executionError,
     executeUploadedTask,
   } = useSimulationState();
 
-  const selectedTarget = decision.selectedTarget;
   const isExecuting = ["optimizing", "offloading", "executing"].includes(executionStage) || apiStatus === "running";
 
   return (

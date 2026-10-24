@@ -29,6 +29,7 @@ import {
   SCENARIO_PRESETS,
 } from "./simulationPresets";
 import { evaluateOffloadingDecision } from "@/lib/offloading/decisionEngine";
+import { MAX_BATCH_IMAGES, MAX_IMAGE_MB, MAX_VIDEO_MB, MAX_VIDEO_SECONDS, fileMb } from "./workloadLimits";
 import {
   submitSimulationToBackend,
   executeTaskOffloading,
@@ -68,6 +69,8 @@ let currentExperimentConditions: ExperimentConditions = { ...DEFAULT_EXPERIMENT_
 let currentRealLocalTelemetry: LocalTelemetryResponse | null = null;
 // Live edge/cloud nodes measured by the backend (null until the first answer or when it is offline).
 let currentNodeTelemetry: NodeTelemetryResponse | null = null;
+// Why the last upload was refused (too large, too many photos, video too long), shown in the upload panel.
+let currentUploadError: string | null = null;
 let liveTiers = { edge: false, cloud: false };
 let currentTelemetryLoading: boolean = false;
 let hasAttemptedTelemetryFetch: boolean = false;
@@ -80,13 +83,13 @@ export interface SystemLogEvent {
   type: "INFO" | "WARNING" | "ERROR" | "EXECUTION";
   message: string;
   source: string;
-  details?: any;
+  details?: unknown;
 }
 
 let sessionLogs: SystemLogEvent[] = [];
 let executionHistory: SimulationExecutionResult[] = [];
 
-export function addSessionLog(type: SystemLogEvent["type"], message: string, source: string, details?: any) {
+export function addSessionLog(type: SystemLogEvent["type"], message: string, source: string, details?: unknown) {
   sessionLogs = [{
     id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     timestamp: Date.now(),
@@ -496,6 +499,10 @@ export const simulationStore = {
     return currentNodeTelemetry;
   },
 
+  getUploadError(): string | null {
+    return currentUploadError;
+  },
+
   getSessionLogs(): SystemLogEvent[] {
     return sessionLogs;
   },
@@ -638,6 +645,7 @@ export const simulationStore = {
 
   setWorkloadType(type: WorkloadInputType) {
     currentWorkloadType = type;
+    currentUploadError = null;
     syncTaskWithWorkload();
     if (type !== "IMAGE") {
       currentExecutionStage = "idle";
@@ -657,6 +665,12 @@ export const simulationStore = {
   },
 
   setUploadedImage(file: File) {
+    if (fileMb(file) > MAX_IMAGE_MB) {
+      currentUploadError = `${file.name} is ${fileMb(file).toFixed(1)} MB; a photo can be up to ${MAX_IMAGE_MB} MB.`;
+      notify();
+      return;
+    }
+    currentUploadError = null;
     if (currentUploadedImage?.previewUrl) {
       URL.revokeObjectURL(currentUploadedImage.previewUrl);
     }
@@ -695,7 +709,22 @@ export const simulationStore = {
   },
 
   addBatchImages(files: FileList | File[]) {
-    const fileList = Array.from(files);
+    const problems: string[] = [];
+    const small = Array.from(files).filter((file) => {
+      if (fileMb(file) <= MAX_IMAGE_MB) return true;
+      problems.push(`${file.name} is over ${MAX_IMAGE_MB} MB`);
+      return false;
+    });
+    const room = Math.max(0, MAX_BATCH_IMAGES - currentBatchImages.length);
+    const fileList = small.slice(0, room);
+    if (small.length > room) {
+      problems.push(`only ${MAX_BATCH_IMAGES} photos can be processed at a time, so ${small.length - room} were not added`);
+    }
+    currentUploadError = problems.length ? `Not added: ${problems.join("; ")}.` : null;
+    if (fileList.length === 0) {
+      notify();
+      return;
+    }
     const newItems: UploadedFileItem[] = fileList.map((file) => {
       const previewUrl = typeof window !== "undefined" ? URL.createObjectURL(file) : undefined;
       const sizeMb = Math.round((file.size / (1024 * 1024)) * 100) / 100;
@@ -752,6 +781,12 @@ export const simulationStore = {
   },
 
   setUploadedVideo(file: File) {
+    if (fileMb(file) > MAX_VIDEO_MB) {
+      currentUploadError = `${file.name} is ${fileMb(file).toFixed(1)} MB; a video can be up to ${MAX_VIDEO_MB} MB.`;
+      notify();
+      return;
+    }
+    currentUploadError = null;
     if (currentUploadedVideo?.previewUrl) {
       URL.revokeObjectURL(currentUploadedVideo.previewUrl);
     }
@@ -776,7 +811,16 @@ export const simulationStore = {
       videoEl.preload = "metadata";
       videoEl.src = previewUrl;
       videoEl.onloadedmetadata = () => {
+        // The user may have picked another video (or cleared it) while this one was loading.
+        if (currentUploadedVideo?.file !== file) return;
         const durationSeconds = Math.round(videoEl.duration * 10) / 10;
+        // Longer videos are too heavy for laptops and free CPU servers: refuse them before upload.
+        if (durationSeconds > MAX_VIDEO_SECONDS + 0.1) {
+          simulationStore.clearUploadedVideo();
+          currentUploadError = `${file.name} is ${durationSeconds} s long; videos can be up to ${MAX_VIDEO_SECONDS} s.`;
+          notify();
+          return;
+        }
         const width = videoEl.videoWidth;
         const height = videoEl.videoHeight;
         currentVideoMetadata = {
@@ -825,6 +869,8 @@ export const simulationStore = {
    * 5. RESULT READY (renders detections, bounding boxes, and empirical metrics)
    */
   async executeUploadedTask(imageFile?: File): Promise<SimulationExecutionResult | null> {
+    // One task at a time: a second click while the first is running would upload everything again.
+    if (currentApiStatus === "running") return null;
     let targetFiles: File[] = [];
     let effectiveWorkloadType: "IMAGE" | "IMAGE_BATCH" | "VIDEO" = currentWorkloadType;
 
@@ -935,7 +981,11 @@ export const simulationStore = {
       currentStageLabel = "RESULT RETURNED";
       
       executionHistory = [result, ...executionHistory].slice(0, 50);
-      addSessionLog("EXECUTION", `Task ${result.task_id} completed on ${result.decision} in ${result.execution_time_ms}ms`, "DQN_EXECUTOR", result);
+      addSessionLog("EXECUTION", `Task ${result.task_id} completed on ${result.decision} in ${result.execution_time_ms}ms`, "DQN_EXECUTOR", {
+        ...result,
+        // The annotated image is shown in the results panel; a base64 copy here would bloat the log page.
+        annotated_image_base64: result.annotated_image_base64 ? "(image omitted)" : undefined,
+      });
       
       notify();
 
@@ -987,6 +1037,8 @@ export const simulationStore = {
       experimentConditions: { ...DEFAULT_EXPERIMENT_CONDITIONS },
       lastEvaluatedAt: Date.now(),
     };
+    // Keep the real local readings (reset only clears the what-if settings).
+    currentSimulationState = { ...currentSimulationState, device: realDeviceState() };
     syncTaskWithWorkload();
     applyConditionsToEnvironment(currentExperimentConditions);
     currentApiStatus = "idle";
@@ -1144,6 +1196,12 @@ export function useSimulationState() {
     simulationStore.getRealLocalTelemetry
   );
 
+  const uploadError = useSyncExternalStore(
+    simulationStore.subscribe,
+    simulationStore.getUploadError,
+    simulationStore.getUploadError
+  );
+
   const nodeTelemetry = useSyncExternalStore(
     simulationStore.subscribe,
     simulationStore.getNodeTelemetry,
@@ -1215,6 +1273,7 @@ export function useSimulationState() {
     experimentConditions,
     realLocalTelemetry,
     nodeTelemetry,
+    uploadError,
     telemetryLoading,
     sessionLogs,
     executionHistory,

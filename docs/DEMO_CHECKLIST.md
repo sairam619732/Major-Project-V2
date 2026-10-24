@@ -34,7 +34,7 @@ npm run dev
 ```
 *Expected Output*:
 ```text
-▲ Next.js 16.3.6 (Turbopack)
+▲ Next.js 16.4.3 (Turbopack)
 - Local: http://localhost:3000
 ```
 

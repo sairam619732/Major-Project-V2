@@ -52,7 +52,7 @@ export default function LogsPage() {
                         </td>
                         <td className="p-3 text-[11px] font-mono text-slate-300">
                           {log.message}
-                          {log.details && (
+                          {log.details !== undefined && (
                             <details className="mt-1">
                               <summary className="text-[10px] text-slate-500 cursor-pointer">View Details</summary>
                               <pre className="mt-2 p-2 bg-black/60 rounded border border-white/[0.05] text-[10px] overflow-x-auto text-slate-400">

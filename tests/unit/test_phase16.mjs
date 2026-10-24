@@ -92,7 +92,7 @@ async function runTests() {
     if (fakeFetch instanceof Error) {
       console.log(`   PASSED: Network error correctly handled: "${fakeFetch.message}"`);
     }
-  } catch (err) {
+  } catch {
     console.log("   PASSED: Error safely caught");
   }
 

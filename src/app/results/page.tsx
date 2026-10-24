@@ -6,9 +6,7 @@ export default function ResultsPage() {
   const { executionHistory } = useSimulationState();
 
   const total = executionHistory.length;
-  const localCount = executionHistory.filter(e => e.decision === "LOCAL").length;
   const edgeCount = executionHistory.filter(e => e.decision === "EDGE").length;
-  const cloudCount = executionHistory.filter(e => e.decision === "CLOUD").length;
 
   const avgLatency = total > 0 ? executionHistory.reduce((acc, curr) => acc + curr.latency_ms, 0) / total : 0;
   const avgReward = total > 0 ? executionHistory.reduce((acc, curr) => acc + curr.reward, 0) / total : 0;
