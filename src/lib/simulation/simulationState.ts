@@ -33,7 +33,10 @@ import {
   submitSimulationToBackend,
   executeTaskOffloading,
   fetchLocalTelemetry,
+  fetchNodeTelemetry,
+  isNodeLive,
   LocalTelemetryResponse,
+  NodeTelemetryResponse,
   SimulationExecutionResult,
 } from "@/services/apiClient";
 
@@ -63,6 +66,9 @@ export const DEFAULT_EXPERIMENT_CONDITIONS: ExperimentConditions = {
 
 let currentExperimentConditions: ExperimentConditions = { ...DEFAULT_EXPERIMENT_CONDITIONS };
 let currentRealLocalTelemetry: LocalTelemetryResponse | null = null;
+// Live edge/cloud nodes measured by the backend (null until the first answer or when it is offline).
+let currentNodeTelemetry: NodeTelemetryResponse | null = null;
+let liveTiers = { edge: false, cloud: false };
 let currentTelemetryLoading: boolean = false;
 let hasAttemptedTelemetryFetch: boolean = false;
 let telemetryPollers = 0;
@@ -369,7 +375,36 @@ function notify() {
   listeners.forEach((listener) => listener());
 }
 
+/**
+ * A live edge/cloud node replaces that tier's what-if values with its real load, queue, latency
+ * and bandwidth. When a node stops being live, the selected conditions are applied again.
+ */
+function applyLiveNodes() {
+  const edge = isNodeLive(currentNodeTelemetry?.edge) ? currentNodeTelemetry!.edge : null;
+  const cloud = isNodeLive(currentNodeTelemetry?.cloud) ? currentNodeTelemetry!.cloud : null;
+  if ((liveTiers.edge && !edge) || (liveTiers.cloud && !cloud)) {
+    applyConditionsToEnvironment(currentExperimentConditions);
+  }
+  liveTiers = { edge: Boolean(edge), cloud: Boolean(cloud) };
+  const live = <T extends SimulationState["edge"] | SimulationState["cloud"]>(tier: T, node: NonNullable<typeof edge>): T => ({
+    ...tier,
+    cpuLoadPct: Math.round(node.cpu_load ?? 0),
+    queueLength: node.task_queue ?? 0,
+    latencyMs: Math.round(node.network_latency_ms! * 10) / 10,
+    bandwidthGbps: Math.round(node.bandwidth_gbps! * 1000) / 1000,
+    memoryAvailablePct: node.memory_used != null ? Math.round(100 - node.memory_used) : tier.memoryAvailablePct,
+  });
+  if (edge || cloud) {
+    currentSimulationState = {
+      ...currentSimulationState,
+      edge: edge ? live(currentSimulationState.edge, edge) : currentSimulationState.edge,
+      cloud: cloud ? live(currentSimulationState.cloud, cloud) : currentSimulationState.cloud,
+    };
+  }
+}
+
 function evaluateAndUpdate() {
+  applyLiveNodes();
   currentDecisionResult = evaluateOffloadingDecision(
     currentSimulationState.task,
     currentSimulationState.device,
@@ -457,6 +492,10 @@ export const simulationStore = {
     return currentTelemetryLoading;
   },
 
+  getNodeTelemetry(): NodeTelemetryResponse | null {
+    return currentNodeTelemetry;
+  },
+
   getSessionLogs(): SystemLogEvent[] {
     return sessionLogs;
   },
@@ -515,15 +554,18 @@ export const simulationStore = {
     hasAttemptedTelemetryFetch = true;
     notify();
 
-    try {
-      const data = await fetchLocalTelemetry();
-      currentRealLocalTelemetry = data;
+    const [local, nodes] = await Promise.allSettled([fetchLocalTelemetry(), fetchNodeTelemetry()]);
+    // A failed reading means the previous one is no longer live; drop it so the UI shows offline.
+    currentNodeTelemetry = nodes.status === "fulfilled" ? nodes.value : null;
+    if (local.status === "fulfilled") {
+      currentRealLocalTelemetry = local.value;
       currentSimulationState = { ...currentSimulationState, device: realDeviceState() };
-      evaluateAndUpdate();
-    } catch (err) {
-      console.warn("Could not fetch real local host telemetry:", err);
-      // A failed reading means the previous one is no longer live; drop it so the UI shows offline.
+    } else {
+      console.warn("Could not fetch real local host telemetry:", local.reason);
       currentRealLocalTelemetry = null;
+    }
+    try {
+      evaluateAndUpdate();
     } finally {
       currentTelemetryLoading = false;
       notify();
@@ -1102,6 +1144,12 @@ export function useSimulationState() {
     simulationStore.getRealLocalTelemetry
   );
 
+  const nodeTelemetry = useSyncExternalStore(
+    simulationStore.subscribe,
+    simulationStore.getNodeTelemetry,
+    simulationStore.getNodeTelemetry
+  );
+
   const telemetryLoading = useSyncExternalStore(
     simulationStore.subscribe,
     simulationStore.getTelemetryLoading,
@@ -1166,6 +1214,7 @@ export function useSimulationState() {
     executionError,
     experimentConditions,
     realLocalTelemetry,
+    nodeTelemetry,
     telemetryLoading,
     sessionLogs,
     executionHistory,

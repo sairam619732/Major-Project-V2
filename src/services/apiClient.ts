@@ -109,6 +109,64 @@ export interface BackendHealthResponse {
   service: string;
 }
 
+/** Live telemetry of one offloading node (edge PC or cloud server), from the backend's monitor. */
+export interface NodeTelemetry {
+  tier: "EDGE" | "CLOUD";
+  configured: boolean;
+  online: boolean;
+  url: string | null;
+  node_id: string | null;
+  platform: string | null;
+  cpu_count: number | null;
+  cpu_load: number | null;
+  memory_used: number | null;
+  memory_total_gb: number | null;
+  task_queue: number | null;
+  model_ready: boolean | null;
+  network_latency_ms: number | null;
+  bandwidth_gbps: number | null;
+  last_seen: number | null;
+  error: string | null;
+}
+
+export interface NodeTelemetryResponse {
+  edge: NodeTelemetry;
+  cloud: NodeTelemetry;
+}
+
+/** A node is live once it answers and its latency and bandwidth have been measured. */
+export function isNodeLive(node: NodeTelemetry | null | undefined): boolean {
+  return Boolean(node?.configured && node.online && node.network_latency_ms != null && node.bandwidth_gbps != null);
+}
+
+/** Where a tier's values come from: a live node, a configured node that is not answering, or the what-if settings. */
+export function nodeSource(node: NodeTelemetry | null | undefined): "live" | "offline" | "sim" {
+  if (isNodeLive(node)) return "live";
+  return node?.configured ? "offline" : "sim";
+}
+
+/** Fetches the edge/cloud node telemetry measured by the backend. */
+export async function fetchNodeTelemetry(timeoutMs = 3000): Promise<NodeTelemetryResponse> {
+  const baseUrl = getBackendBaseUrl();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${baseUrl}/api/simulation/telemetry/nodes`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new BackendApiError(`Node telemetry request failed with status ${res.status}`, res.status);
+    return (await res.json()) as NodeTelemetryResponse;
+  } catch (err: unknown) {
+    clearTimeout(timeoutId);
+    if (err instanceof BackendApiError) throw err;
+    const msg = err instanceof Error ? err.message : "Unknown network error";
+    throw new BackendApiError(`Backend unreachable at ${baseUrl}: ${msg}`);
+  }
+}
+
 export interface ModelStatusResponse {
   status: string;
   model_loaded: boolean;

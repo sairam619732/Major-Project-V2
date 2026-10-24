@@ -4,11 +4,13 @@ Phase 12: Backend Foundation
 """
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import api_router
+from app.services.remote_nodes import node_monitor
 
 # Load environment variables if backend/.env is present
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -22,7 +24,17 @@ cors_origins_env = os.getenv(
 )
 allowed_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Watch the edge/cloud nodes set in EDGE_NODE_URL / CLOUD_NODE_URL (if any).
+    await node_monitor.start()
+    yield
+    await node_monitor.stop()
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="AI-Based Dynamic Task Offloading Optimization Backend",
     description=(
         "Backend service providing telemetry models, task simulation contracts, "

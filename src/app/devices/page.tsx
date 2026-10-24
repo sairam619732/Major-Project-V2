@@ -3,9 +3,75 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { simulationStore, useSimulationState } from "@/lib/simulation/simulationState";
 import { useBackendStatus } from "@/hooks/useBackendStatus";
 import { useEffect } from "react";
+import { nodeSource } from "@/services/apiClient";
+
+const ACCENTS = {
+  emerald: { border: "border-emerald-900/30", title: "text-emerald-400", specs: "text-emerald-600" },
+  purple: { border: "border-purple-900/30", title: "text-purple-400", specs: "text-purple-600" },
+} as const;
+
+const BADGES = {
+  live: { text: "LIVE", cls: "bg-emerald-500/20 text-emerald-400" },
+  offline: { text: "OFFLINE", cls: "bg-rose-500/20 text-rose-400" },
+  sim: { text: "SIMULATED", cls: "bg-white/[0.08] text-slate-300" },
+} as const;
+
+/** Edge or cloud tier: a live node's real readings, an offline notice, or the simulated what-if values. */
+function TierCard({ tier, title, accent }: { tier: "edge" | "cloud"; title: string; accent: keyof typeof ACCENTS }) {
+  const { state, nodeTelemetry } = useSimulationState();
+  const node = nodeTelemetry?.[tier];
+  const source = nodeSource(node);
+  const colors = ACCENTS[accent];
+  const sim = state[tier];
+
+  const lines =
+    source === "live" && node
+      ? {
+          left: [`Node: ${node.node_id ?? "—"}`, `Platform: ${node.platform ?? "—"}`, `Endpoint: ${node.url}`],
+          right: [
+            `CPU: ${node.cpu_load}% of ${node.cpu_count} cores`,
+            `Memory: ${node.memory_used}% of ${node.memory_total_gb} GB`,
+            `Queue: ${node.task_queue} tasks`,
+            `Latency: ${node.network_latency_ms} ms · Bandwidth: ${node.bandwidth_gbps} Gbps`,
+          ],
+          footer: "Measured every 3 s",
+        }
+      : source === "offline" && node
+        ? {
+            left: [`Endpoint: ${node.url}`, `Error: ${node.error ?? "not answering"}`],
+            right: [],
+            footer: "Not answering: tasks are not sent here",
+          }
+        : {
+            left: [`State: Simulated load (${sim.cpuLoadPct}% CPU)`, "Endpoint: Cost model (executes on local host)"],
+            right: [`Bandwidth: ${sim.bandwidthGbps} Gbps`, `Base Latency: ${sim.latencyMs} ms`],
+            footer: `No node configured (${tier.toUpperCase()}_NODE_URL)`,
+          };
+
+  return (
+    <div className={`p-6 holo-panel border ${colors.border} rounded-xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4`}>
+      <div className="flex flex-col gap-1 min-w-0">
+        <div className="flex items-center gap-3">
+          <h2 className={`text-xl font-bold ${colors.title}`}>{title}</h2>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${BADGES[source].cls}`}>{BADGES[source].text}</span>
+        </div>
+        {lines.left.map((l) => (
+          <p key={l} className="text-[12px] font-mono text-slate-400 break-all">{l}</p>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2 items-start sm:items-end">
+        <span className={`text-[10px] font-mono uppercase tracking-wider ${colors.specs}`}>Specs</span>
+        {lines.right.map((l) => (
+          <span key={l} className="text-[12px] font-mono text-slate-300">{l}</span>
+        ))}
+        <span className="text-[10px] font-mono text-slate-500 mt-1">{lines.footer}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function DevicesPage() {
-  const { state, realLocalTelemetry } = useSimulationState();
+  const { realLocalTelemetry } = useSimulationState();
   const backend = useBackendStatus();
 
   // Poll the backend's psutil telemetry while this page is open (shared poller).
@@ -45,41 +111,8 @@ export default function DevicesPage() {
            </div>
          </div>
 
-         {/* Edge Server Node */}
-         <div className="p-6 holo-panel border border-emerald-900/30 rounded-xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-           <div className="flex flex-col gap-1">
-             <div className="flex items-center gap-3">
-               <h2 className="text-xl font-bold text-emerald-400">Edge Server</h2>
-               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400">SIMULATED</span>
-             </div>
-             <p className="text-[12px] font-mono text-slate-400 mt-1">State: Simulated load ({state.edge.cpuLoadPct}% CPU)</p>
-             <p className="text-[12px] font-mono text-slate-400">Endpoint: Cost model (executes on local host)</p>
-           </div>
-           <div className="flex flex-col gap-2 items-start sm:items-end">
-             <span className="text-[10px] font-mono text-emerald-600 uppercase tracking-wider">Specs</span>
-             <span className="text-[12px] font-mono text-slate-300">Bandwidth: {state.edge.bandwidthGbps} Gbps</span>
-             <span className="text-[12px] font-mono text-slate-300">Base Latency: {state.edge.latencyMs} ms</span>
-             <span className="text-[10px] font-mono text-slate-500 mt-1">Status: Modelled tier, no server required</span>
-           </div>
-         </div>
-
-         {/* Cloud Cluster Node */}
-         <div className="p-6 holo-panel border border-purple-900/30 rounded-xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-           <div className="flex flex-col gap-1">
-             <div className="flex items-center gap-3">
-               <h2 className="text-xl font-bold text-purple-400">Cloud Datacenter</h2>
-               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-400">SIMULATED</span>
-             </div>
-             <p className="text-[12px] font-mono text-slate-400 mt-1">State: Simulated load ({state.cloud.cpuLoadPct}% CPU)</p>
-             <p className="text-[12px] font-mono text-slate-400">Endpoint: Cost model (executes on local host)</p>
-           </div>
-           <div className="flex flex-col gap-2 items-start sm:items-end">
-             <span className="text-[10px] font-mono text-purple-600 uppercase tracking-wider">Specs</span>
-             <span className="text-[12px] font-mono text-slate-300">Bandwidth: {state.cloud.bandwidthGbps} Gbps</span>
-             <span className="text-[12px] font-mono text-slate-300">Base Latency: {state.cloud.latencyMs} ms</span>
-             <span className="text-[10px] font-mono text-slate-500 mt-1">Status: Modelled tier, no server required</span>
-           </div>
-         </div>
+         <TierCard tier="edge" title="Edge Server" accent="emerald" />
+         <TierCard tier="cloud" title="Cloud Datacenter" accent="purple" />
        </div>
     </DashboardLayout>
   );

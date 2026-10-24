@@ -1,6 +1,7 @@
 "use client";
 
 import { simulationStore, useSimulationState } from "@/lib/simulation/simulationState";
+import { nodeSource } from "@/services/apiClient";
 
 import { useEffect, useState } from "react";
 
@@ -57,7 +58,16 @@ function SourceTag({ source }: { source: FeatureSource }) {
 }
 
 export function SimulationTelemetryPanel() {
-  const { state, realLocalTelemetry, telemetryLoading, fetchRealTelemetry } = useSimulationState();
+  const { state, realLocalTelemetry, nodeTelemetry, telemetryLoading, fetchRealTelemetry } = useSimulationState();
+  // Edge/cloud inputs are live when a node is connected, otherwise the what-if settings.
+  const edgeSource: FeatureSource = nodeSource(nodeTelemetry?.edge);
+  const cloudSource: FeatureSource = nodeSource(nodeTelemetry?.cloud);
+  const latencyBadge =
+    edgeSource === "live" && cloudSource === "live"
+      ? { text: "LIVE", cls: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10" }
+      : edgeSource === "sim" && cloudSource === "sim"
+        ? { text: "SIMULATED", cls: "text-violet-300 border-violet-500/30 bg-violet-500/10" }
+        : { text: `EDGE ${edgeSource.toUpperCase()} · CLOUD ${cloudSource.toUpperCase()}`, cls: "text-slate-300 border-white/[0.12]" };
   const [dqnExpanded, setDqnExpanded] = useState(false);
   
   // Poll the backend's psutil telemetry while this panel is on screen (shared poller).
@@ -86,14 +96,14 @@ export function SimulationTelemetryPanel() {
     { name: "Local Memory Avail", value: localValue(`${state.device.memoryAvailablePct}%`), key: 6, source: localSource },
     { name: "Local Battery", value: localValue(`${state.device.batteryPct}%`), key: 7, source: batteryReal ? "live" : isLocalReal ? "assumed" : "offline" },
     { name: "Local Base Latency", value: localValue(`${state.device.latencyMs} ms`), key: 8, source: isLocalReal ? "assumed" : "offline" },
-    { name: "Edge CPU Load", value: `${state.edge.cpuLoadPct}%`, key: 9, source: "sim" },
-    { name: "Edge Task Queue", value: `${state.edge.queueLength}`, key: 10, source: "sim" },
-    { name: "Edge Network Lat", value: `${state.edge.latencyMs} ms`, key: 11, source: "sim" },
-    { name: "Edge Bandwidth", value: `${state.edge.bandwidthGbps} Gbps`, key: 12, source: "sim" },
-    { name: "Cloud CPU Load", value: `${state.cloud.cpuLoadPct}%`, key: 13, source: "sim" },
-    { name: "Cloud Task Queue", value: `${state.cloud.queueLength}`, key: 14, source: "sim" },
-    { name: "Cloud Network Lat", value: `${state.cloud.latencyMs} ms`, key: 15, source: "sim" },
-    { name: "Cloud Bandwidth", value: `${state.cloud.bandwidthGbps} Gbps`, key: 16, source: "sim" },
+    { name: "Edge CPU Load", value: `${state.edge.cpuLoadPct}%`, key: 9, source: edgeSource },
+    { name: "Edge Task Queue", value: `${state.edge.queueLength}`, key: 10, source: edgeSource },
+    { name: "Edge Network Lat", value: `${state.edge.latencyMs} ms`, key: 11, source: edgeSource },
+    { name: "Edge Bandwidth", value: `${state.edge.bandwidthGbps} Gbps`, key: 12, source: edgeSource },
+    { name: "Cloud CPU Load", value: `${state.cloud.cpuLoadPct}%`, key: 13, source: cloudSource },
+    { name: "Cloud Task Queue", value: `${state.cloud.queueLength}`, key: 14, source: cloudSource },
+    { name: "Cloud Network Lat", value: `${state.cloud.latencyMs} ms`, key: 15, source: cloudSource },
+    { name: "Cloud Bandwidth", value: `${state.cloud.bandwidthGbps} Gbps`, key: 16, source: cloudSource },
   ];
 
   return (
@@ -146,8 +156,8 @@ export function SimulationTelemetryPanel() {
             <span className="font-mono text-[13px] tracking-[0.15em] uppercase text-slate-300 font-bold">
               NETWORK LATENCY
             </span>
-            <span className="ml-auto px-1.5 py-px rounded border font-mono text-[8.5px] tracking-wider text-violet-300 border-violet-500/30 bg-violet-500/10">
-              SIMULATED
+            <span className={`ml-auto px-1.5 py-px rounded border font-mono text-[8.5px] tracking-wider ${latencyBadge.cls}`}>
+              {latencyBadge.text}
             </span>
          </div>
          <div className="flex flex-col gap-4 font-mono text-[12px]">

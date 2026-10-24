@@ -256,8 +256,34 @@ From the project root:
 cd backend
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-The FastAPI backend will start at `http://127.0.0.1:8000`. It is the only server the project needs: whichever tier the DQN selects, uploaded workloads run in-process on the local machine, and EDGE/CLOUD network and queueing costs come from the cost model.  
+The FastAPI backend will start at `http://127.0.0.1:8000`. On its own it is the only server the project needs: a tier with no node connected is simulated (the workload runs in-process on the local machine and its network and queueing costs come from the cost model).  
 Interactive Swagger API documentation is available at `http://127.0.0.1:8000/docs`.
+
+### Edge and cloud nodes (optional)
+The edge and cloud tiers can be real machines running the offloading node (`backend/node`). A node reports its own CPU load, memory and task queue, and runs the object detector on tasks sent to it. The backend checks each node every 3 s, measures the real network latency (round trip) and bandwidth (a timed 512 KB upload every 30 s), feeds these to the DQN, and sends the task to the node when the DQN picks that tier. A node that stops answering is shown as offline and gets no tasks.
+
+**Edge (a PC on the same Wi-Fi).** On that PC, set up the backend as in section 9, then:
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m node.run
+```
+It prints the line to use, e.g. `EDGE_NODE_URL=http://192.168.1.20:8100`. Allow port 8100 through that PC's firewall. On the laptop running the main backend, put that line in `backend/.env` (copy `backend/.env.example`) and restart the backend.
+
+**Cloud (Hugging Face Spaces, free CPU tier).** The same node runs in a Docker Space (`backend/deploy/hf-space/`). A tier whose URL is empty stays simulated.
+1. On huggingface.co create a **New Space**: SDK **Docker**, template **Blank**, hardware **CPU basic (free)**, visibility **Public**.
+2. In the Space's **Settings → Variables and secrets**, add a **secret** `NODE_TOKEN` with a long random value, e.g. from `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Only callers that send this key can use the node.
+3. Build the upload folder and upload it (log in with your own Hugging Face access token that has write permission):
+   ```powershell
+   cd backend
+   .\.venv\Scripts\python.exe scripts\build_hf_space.py
+   .\.venv\Scripts\python.exe -m pip install -U huggingface_hub
+   .\.venv\Scripts\hf.exe auth login
+   .\.venv\Scripts\hf.exe upload <your-username>/<space-name> dist\hf-space . --repo-type space
+   ```
+4. Wait for the Space to finish building (its **Logs** tab), then open `https://<your-username>-<space-name>.hf.space/health`.
+5. In `backend/.env` set `CLOUD_NODE_URL=https://<your-username>-<space-name>.hf.space` and `CLOUD_NODE_TOKEN=<the same key>`, then restart the backend.
+
+A free Space sleeps after a long time without requests; the first request after that is slow while it wakes up. While the backend runs it checks the node every 3 s, which keeps it awake.
 
 ---
 
@@ -297,7 +323,10 @@ cd backend
 # 4. Phase 15 Benchmark Suite
 .\.venv\Scripts\python.exe -m tests.test_benchmark
 
-# 5. Full Backend API Regression Suite (requires running server)
+# 5. Offloading Node & Node Monitor Suite
+.\.venv\Scripts\python.exe -m tests.test_nodes
+
+# 6. Full Backend API Regression Suite (requires running server)
 .\.venv\Scripts\python.exe -m tests.test_api
 cd ..
 ```

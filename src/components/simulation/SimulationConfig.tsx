@@ -1,6 +1,7 @@
 "use client";
 
 import { useSimulationState } from "@/lib/simulation/simulationState";
+import { isNodeLive } from "@/services/apiClient";
 import { SCENARIO_PRESETS } from "@/lib/simulation/simulationPresets";
 import { WorkloadLevel, NetworkConditionLevel } from "@/lib/simulation/simulationTypes";
 
@@ -59,7 +60,9 @@ function ConditionSelector<T extends string>({
 }
 
 export function SimulationConfig() {
-  const { state, experimentConditions, setExperimentCondition, applyPreset, updateTask } = useSimulationState();
+  const { state, experimentConditions, setExperimentCondition, applyPreset, updateTask, nodeTelemetry } = useSimulationState();
+  // Tiers with a live node use measured values, so their condition buttons don't apply.
+  const liveTiers = (["edge", "cloud"] as const).filter((t) => isNodeLive(nodeTelemetry?.[t]));
 
   return (
     <div className="flex flex-col p-6 rounded-xl holo-panel border border-cyan-500/30 text-slate-200">
@@ -134,6 +137,13 @@ export function SimulationConfig() {
           accentColor="#22d3ee"
           onChange={(val) => setExperimentCondition("networkCondition", val)}
         />
+        {liveTiers.length > 0 && (
+          <p className="pt-3 text-[11px] font-mono text-emerald-300/90">
+            {liveTiers.length > 1
+              ? "EDGE and CLOUD are live nodes: their load, latency and bandwidth are measured, so these settings are not used."
+              : `${liveTiers[0].toUpperCase()} is a live node: its load, latency and bandwidth are measured, so these settings only affect ${liveTiers[0] === "edge" ? "CLOUD" : "EDGE"}.`}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col xl:flex-row xl:items-center gap-4 pt-4 border-t border-white/[0.06]">

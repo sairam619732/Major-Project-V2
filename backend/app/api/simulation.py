@@ -18,6 +18,7 @@ from app.models.simulation import (
 from app.models.system import LocalNodeState, EdgeNodeState, CloudNodeState
 from app.services.evaluator import evaluate_simulation
 from app.services.cv_executor import cv_executor
+from app.services.remote_nodes import node_monitor
 from app.ml.inference import inference_service
 from app.ml.environment import compute_action_metrics
 
@@ -108,6 +109,18 @@ async def get_real_local_telemetry():
         "base_latency_status": "ASSUMED (fixed on-device dispatch overhead)",
         "base_latency_is_real": False,
     }
+
+
+@router.get(
+    "/telemetry/nodes",
+    summary="Get Live Edge and Cloud Node Telemetry",
+    description=(
+        "Real load, latency and bandwidth of the edge and cloud offloading nodes set in "
+        "EDGE_NODE_URL / CLOUD_NODE_URL. A tier with no URL is reported as not configured (simulated)."
+    ),
+)
+async def get_node_telemetry():
+    return node_monitor.telemetry()
 
 
 @router.post(
@@ -296,6 +309,9 @@ async def execute_simulation_task(
         network_latency=max(0.1, float(cloud_network_latency or 65.0)),
         bandwidth=max(0.1, float(cloud_bandwidth or 10.0)),
     )
+    # Live nodes replace the what-if values with real measurements.
+    edge_state = node_monitor.live_state("edge") or edge_state
+    cloud_state = node_monitor.live_state("cloud") or cloud_state
 
     task_input = SimulationTaskInput(
         task_id=actual_task_id,
@@ -329,26 +345,57 @@ async def execute_simulation_task(
         "CLOUD": raw_q_values.get("cloud", 0.0),
     }
 
-    # STEP E: Execute on the local host. The DQN decision is kept and reported, but every tier runs
-    # in-process; EDGE/CLOUD network and queueing costs are modelled by compute_action_metrics.
-    workload_res = cv_executor.process_workload(
-        workload_type=w_type,
-        files_data=[(name, data) for name, data, _ in files_data],
-        tier="LOCAL",
-    )
-    exec_worker = "local-host-device"
-    if decision == "LOCAL":
-        exec_env = "LOCAL (On-Device CPU)"
-        env_desc = "Executed locally on device without network transmission. Measured real neural inference compute."
-    else:
-        exec_env = f"LOCAL HOST ({decision} tier simulated)"
+    # A configured node that is not answering can't take the task: use the best remaining tier.
+    routing_note = None
+    unavailable = {tier for tier, key in (("EDGE", "edge"), ("CLOUD", "cloud")) if node_monitor.is_unavailable(key)}
+    if decision in unavailable:
+        chosen = max((t for t in ("LOCAL", "EDGE", "CLOUD") if t not in unavailable), key=lambda t: q_values[t])
+        routing_note = f"DQN chose {decision}, but the {decision.lower()} node is offline, so the task ran on {chosen}."
+        decision = chosen
+        action_idx = {"LOCAL": 0, "EDGE": 1, "CLOUD": 2}[chosen]
+
+    # STEP E: Execute. A live edge/cloud node runs the task itself over the network; a tier with no
+    # node configured is simulated: the task runs here and its network/queue costs come from the cost model.
+    remote_key = {"EDGE": "edge", "CLOUD": "cloud"}.get(decision)
+    remote_res = None
+    if remote_key and node_monitor.is_live(remote_key):
+        try:
+            remote_res = await node_monitor.execute(remote_key, files_data, w_type, actual_task_id)
+        except Exception as exc:
+            routing_note = f"The {decision.lower()} node failed ({type(exc).__name__}), so the task ran locally."
+
+    if remote_res is not None:
+        workload_res = remote_res
+        exec_worker = remote_res.get("node_id") or f"{remote_key}-node"
+        exec_env = f"{decision} ({exec_worker})"
         env_desc = (
-            f"DQN selected {decision}. The workload ran in-process on the local host; "
-            f"{decision} network and queueing costs are estimated by the cost model."
+            f"Sent over the network to the {decision.lower()} node and run there. "
+            "Latency is measured end to end, including the upload."
         )
-    processing_time_ms = workload_res["processing_time_ms"]
-    network_transfer_ms = 0.0
-    total_latency_ms = processing_time_ms
+        processing_time_ms = remote_res["processing_time_ms"]
+        total_latency_ms = remote_res["round_trip_ms"]
+        network_transfer_ms = round(max(0.0, total_latency_ms - remote_res.get("server_elapsed_ms", processing_time_ms)), 2)
+    else:
+        workload_res = cv_executor.process_workload(
+            workload_type=w_type,
+            files_data=[(name, data) for name, data, _ in files_data],
+            tier="LOCAL",
+        )
+        exec_worker = "local-host-device"
+        if decision == "LOCAL" or routing_note:
+            exec_env = "LOCAL (On-Device CPU)"
+            env_desc = "Executed locally on device without network transmission. Measured real neural inference compute."
+        else:
+            exec_env = f"LOCAL HOST ({decision} tier simulated)"
+            env_desc = (
+                f"DQN selected {decision}. No {decision.lower()} node is configured, so the workload ran "
+                f"in-process on the local host; {decision} network and queueing costs are estimated by the cost model."
+            )
+        processing_time_ms = workload_res["processing_time_ms"]
+        network_transfer_ms = 0.0
+        total_latency_ms = processing_time_ms
+    if routing_note:
+        env_desc = f"{routing_note} {env_desc}"
     detections = workload_res["detections"]
     detection_count = workload_res["detection_count"]
     annotated_b64 = workload_res.get("annotated_image_base64")
@@ -409,7 +456,8 @@ async def execute_simulation_task(
         q_values=q_values,
         execution_environment=exec_env,
         environment_description=env_desc,
-        is_simulated_distributed=action_idx != 0,
+        # True only when EDGE/CLOUD was chosen but no node exists, so its costs come from the cost model.
+        is_simulated_distributed=action_idx != 0 and remote_res is None and routing_note is None,
         detections=formatted_detections,
         detection_count=len(formatted_detections),
         annotated_image_base64=annotated_b64,
