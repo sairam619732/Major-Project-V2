@@ -11,7 +11,8 @@
     "check": "node scripts/check.mjs",
     "check:quick": "node scripts/check.mjs --quick",
     "demo": "node scripts/demo.mjs",
-    "demo:stop": "node scripts/demo.mjs --stop"
+    "demo:stop": "node scripts/demo.mjs --stop",
+    "present": "node scripts/demo.mjs --real"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

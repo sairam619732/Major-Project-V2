@@ -54,6 +54,33 @@ class TestExecuteInputs(unittest.TestCase):
         self.assertTrue(res.json()["annotated_image_base64"].startswith("data:image/jpeg;base64,"))
 
 
+class TestRoutingAroundNodeLimits(unittest.TestCase):
+    """A task over the cloud node's upload limit (e.g. Vercel's 4.5 MB) goes to another tier."""
+
+    def test_oversized_task_is_not_sent_to_cloud(self):
+        from app.api import simulation as sim
+        from app.services.remote_nodes import NodeTelemetry
+
+        cloud = NodeTelemetry("CLOUD", url="https://cloud.example", online=True, max_upload_mb=0.01)
+        real_predict = sim.inference_service.predict
+
+        def predict_cloud(**kwargs):
+            res = real_predict(**kwargs)
+            res.update(decision="CLOUD", action_index=2, q_values={"local": -1.0, "edge": -2.0, "cloud": -0.5})
+            return res
+
+        with mock.patch.dict(sim.node_monitor.nodes, {"cloud": cloud}), mock.patch.object(
+            sim.inference_service, "predict", side_effect=predict_cloud
+        ):
+            res = TestClient(app).post(
+                "/api/simulation/execute", files=[("files", ("a.jpg", SAMPLE, "image/jpeg"))]
+            )
+        self.assertEqual(res.status_code, 200, res.text)
+        body = res.json()
+        self.assertEqual(body["decision"], "LOCAL")
+        self.assertIn("over the cloud node's", body["environment_description"])
+
+
 class TestTrainingEndpoint(unittest.TestCase):
     def test_training_is_off_by_default(self):
         with mock.patch.dict(os.environ, {"ENABLE_TRAINING_API": ""}):

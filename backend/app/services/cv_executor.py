@@ -1,3 +1,4 @@
+import importlib.util
 import io
 import os
 import time
@@ -5,13 +6,11 @@ import base64
 import tempfile
 import shutil
 import subprocess
+import json
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
+import numpy as np
 from PIL import Image, ImageDraw
-import torch
-from torchvision.models.detection import (
-    ssdlite320_mobilenet_v3_large,
-    SSDLite320_MobileNet_V3_Large_Weights,
-)
 
 from app.services.workload_limits import FFMPEG_MISSING, MAX_VIDEO_SECONDS, WorkloadError
 
@@ -20,32 +19,76 @@ from app.services.workload_limits import FFMPEG_MISSING, MAX_VIDEO_SECONDS, Work
 # original image's pixels; only the preview is shrunk (keeps responses small for large photos).
 PREVIEW_MAX_SIDE = 1280
 
+MODEL_NAME = "SSDLite320_MobileNet_V3_Large (COCO 91 Classes)"
+# The same detector exported to ONNX (backend/scripts/export_detector_onnx.py), for nodes without
+# PyTorch such as the Vercel cloud node. Results match PyTorch to within 0.001 px.
+ONNX_MODEL = Path(__file__).resolve().parents[1] / "ml" / "checkpoints" / "ssdlite320_coco.onnx"
+ONNX_LABELS = ONNX_MODEL.with_name("ssdlite320_coco_labels.json")
 
-class ComputerVisionExecutor:
-    """Singleton execution engine for real PyTorch object detection.
 
-    Runs real neural inference on uploaded image payloads.
-    Models simulated execution environments (Local device, Edge fog node, Cloud cluster)
-    with accurate latency, energy, and economic cost profiles.
-    """
+class _TorchEngine:
+    name = "PyTorch"
 
     def __init__(self):
-        self.device = torch.device("cpu")
+        import torch
+        from torchvision.models.detection import SSDLite320_MobileNet_V3_Large_Weights, ssdlite320_mobilenet_v3_large
+
+        self._torch = torch
+        weights = SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
+        self.model = ssdlite320_mobilenet_v3_large(weights=weights).eval()
+        self.transforms = weights.transforms()
+        self.categories = weights.meta.get("categories", [])
+
+    def __call__(self, img: Image.Image):
+        with self._torch.no_grad():
+            out = self.model(self.transforms(img).unsqueeze(0))[0]
+        return out["boxes"].numpy(), out["scores"].numpy(), out["labels"].numpy()
+
+
+class _OnnxEngine:
+    name = "ONNX Runtime"
+
+    def __init__(self):
+        import onnxruntime as ort
+
+        self.session = ort.InferenceSession(str(ONNX_MODEL), providers=["CPUExecutionProvider"])
+        self.categories = json.loads(ONNX_LABELS.read_text(encoding="utf-8"))
+
+    def __call__(self, img: Image.Image):
+        # Same input as PyTorch's ToTensor: (3, H, W) floats in 0..1.
+        image = np.asarray(img, dtype=np.float32).transpose(2, 0, 1) / 255.0
+        boxes, scores, labels = self.session.run(None, {"image": np.ascontiguousarray(image)})
+        return boxes, scores, labels
+
+
+def _load_engine():
+    """DETECTOR_ENGINE=torch | onnx | auto (default: PyTorch if installed, else ONNX Runtime)."""
+    choice = os.getenv("DETECTOR_ENGINE", "auto").strip().lower()
+    if choice == "onnx":
+        return _OnnxEngine()
+    if choice == "torch":
+        return _TorchEngine()
+    return _TorchEngine() if importlib.util.find_spec("torch") else _OnnxEngine()
+
+
+class ComputerVisionExecutor:
+    """Runs the real object detector (SSDLite320 MobileNetV3) on uploaded images and videos,
+    with PyTorch or, where PyTorch isn't installed, the same model on ONNX Runtime."""
+
+    def __init__(self):
         try:
-            self.weights = SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
-            self.model = ssdlite320_mobilenet_v3_large(weights=self.weights)
-            self.model.eval()
-            self.transforms = self.weights.transforms()
-            self.categories = self.weights.meta.get("categories", [])
+            self.engine = _load_engine()
+            self.categories = self.engine.categories
+            self.model_architecture = f"{MODEL_NAME} · {self.engine.name}"
             self.is_loaded = True
             self.load_error = None
         except Exception as e:
-            # Fallback in case of runtime weight loading issue
-            self.model = None
-            self.transforms = None
+            # Reported by detect() and the node's /health instead of returning empty results.
+            self.engine = None
             self.categories = []
+            self.model_architecture = MODEL_NAME
             self.is_loaded = False
-            self.load_error = str(e)
+            self.load_error = f"{type(e).__name__}: {e}"
 
     def extract_image_metadata(self, image_bytes: bytes) -> Dict[str, Any]:
         """Extracts physical and computational attributes from uploaded image bytes."""
@@ -85,7 +128,7 @@ class ComputerVisionExecutor:
         """Executes real object detection on image bytes and returns bounding boxes + annotated image."""
         start_time = time.perf_counter()
 
-        if not self.is_loaded or self.model is None:
+        if not self.is_loaded or self.engine is None:
             # Report it: returning "0 objects" would look like a real result.
             raise RuntimeError(f"The object detector is not loaded ({self.load_error}).")
         try:
@@ -97,15 +140,8 @@ class ComputerVisionExecutor:
         detections: List[Dict[str, Any]] = []
         annotated_b64: Optional[str] = None
 
-        # Transform image to normalized tensor (SSDLite input: 320x320)
-        input_tensor = self.transforms(img).unsqueeze(0).to(self.device)
-
-        with torch.no_grad():
-            predictions = self.model(input_tensor)[0]
-
-        boxes = predictions["boxes"].cpu().numpy()
-        scores = predictions["scores"].cpu().numpy()
-        labels = predictions["labels"].cpu().numpy()
+        # The model resizes to 320x320 itself; boxes come back in this image's pixels.
+        boxes, scores, labels = self.engine(img)
 
         draw = ImageDraw.Draw(img)
 
@@ -164,7 +200,7 @@ class ComputerVisionExecutor:
             "detection_count": len(detections),
             "inference_time_ms": elapsed_ms,
             "annotated_image_base64": annotated_b64,
-            "model_architecture": "SSDLite320_MobileNet_V3_Large (COCO 91 Classes)",
+            "model_architecture": self.model_architecture,
         }
 
     def detect_batch(
@@ -201,7 +237,7 @@ class ComputerVisionExecutor:
             "inference_time_ms": total_elapsed_ms,
             "annotated_image_base64": primary_annotated_b64,
             "batch_items": batch_items,
-            "model_architecture": "SSDLite320_MobileNet_V3_Large (COCO 91 Classes)",
+            "model_architecture": self.model_architecture,
         }
 
     def detect_video(

@@ -16,6 +16,10 @@ Network emulation (for running every tier on one machine, e.g. a single-laptop d
   NODE_EMULATED_BANDWIDTH_MBPS  link speed: request and response bodies are delayed by size / speed
 The node really waits, so the backend's normal measurements see the emulated link. /status reports
 the settings so the UI can label these values as emulated, never as a real network.
+
+Limits of the machine it runs on (reported in /status so the backend doesn't send tasks it can't run):
+  NODE_MAX_UPLOAD_MB  largest upload the host accepts (e.g. 4 on Vercel, whose limit is 4.5 MB)
+  Video needs ffmpeg/ffprobe on the host; /status says whether they are installed.
 """
 
 import asyncio
@@ -23,6 +27,7 @@ import hmac
 import os
 import platform
 import random
+import shutil
 import socket
 import threading
 import time
@@ -39,6 +44,8 @@ from app.services.workload_limits import WorkloadError, check_workload, max_file
 NODE_TIER = os.getenv("NODE_TIER", "EDGE").upper()
 NODE_ID = os.getenv("NODE_ID", f"{NODE_TIER.lower()}-{socket.gethostname().lower()}")
 NODE_TOKEN = os.getenv("NODE_TOKEN", "")
+# Set for a node on the public internet (the Vercel deploy does): refuse tasks if no NODE_TOKEN is set.
+NODE_REQUIRE_TOKEN = os.getenv("NODE_REQUIRE_TOKEN", "").strip().lower() in ("1", "true", "yes")
 
 
 def _env_float(name: str) -> float:
@@ -51,6 +58,7 @@ def _env_float(name: str) -> float:
 EMULATED_RTT_MS = _env_float("NODE_EMULATED_RTT_MS")
 EMULATED_JITTER_MS = _env_float("NODE_EMULATED_JITTER_MS")
 EMULATED_BANDWIDTH_MBPS = _env_float("NODE_EMULATED_BANDWIDTH_MBPS")
+MAX_UPLOAD_MB = _env_float("NODE_MAX_UPLOAD_MB") or None
 NETWORK_EMULATION = (
     {"rtt_ms": EMULATED_RTT_MS, "jitter_ms": EMULATED_JITTER_MS, "bandwidth_mbps": EMULATED_BANDWIDTH_MBPS or None}
     if EMULATED_RTT_MS or EMULATED_BANDWIDTH_MBPS
@@ -74,6 +82,11 @@ app = FastAPI(
 @app.middleware("http")
 async def require_token(request: Request, call_next):
     """With NODE_TOKEN set, only callers that send it may use the node (health stays open)."""
+    if NODE_REQUIRE_TOKEN and not NODE_TOKEN and request.url.path != "/health":
+        return JSONResponse(
+            {"detail": "This node has no NODE_TOKEN set, so it refuses requests. Add one in its settings."},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
     if NODE_TOKEN and request.url.path != "/health":
         sent = request.headers.get("x-node-token", "")
         if not hmac.compare_digest(sent, NODE_TOKEN):
@@ -140,6 +153,12 @@ async def node_status():
         "model_ready": cv_executor.is_loaded,
         # Set when this node adds an emulated network delay (single-machine demo); None = real network.
         "network_emulation": NETWORK_EMULATION,
+        # What this host can take: the backend routes other tasks elsewhere.
+        "capabilities": {
+            "video": shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None,
+            "max_upload_mb": MAX_UPLOAD_MB,
+        },
+        "detector": cv_executor.model_architecture,
         "timestamp": time.time(),
     }
 

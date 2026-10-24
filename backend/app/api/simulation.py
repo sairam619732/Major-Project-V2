@@ -368,12 +368,18 @@ async def execute_simulation_task(
         "CLOUD": raw_q_values.get("cloud", 0.0),
     }
 
-    # A configured node that is not answering can't take the task: use the best remaining tier.
+    # A node that is offline, or that can't run this task (e.g. a video on a host without ffmpeg,
+    # or an upload over its size limit), doesn't get it: use the best remaining tier.
     routing_note = None
-    unavailable = {tier for tier, key in (("EDGE", "edge"), ("CLOUD", "cloud")) if node_monitor.is_unavailable(key)}
+    unavailable = {}
+    for tier, key in (("EDGE", "edge"), ("CLOUD", "cloud")):
+        if node_monitor.is_unavailable(key):
+            unavailable[tier] = f"the {key} node is offline"
+        elif reason := node_monitor.cannot_run(key, w_type, total_bytes):
+            unavailable[tier] = reason
     if decision in unavailable:
         chosen = max((t for t in ("LOCAL", "EDGE", "CLOUD") if t not in unavailable), key=lambda t: q_values[t])
-        routing_note = f"DQN chose {decision}, but the {decision.lower()} node is offline, so the task ran on {chosen}."
+        routing_note = f"DQN chose {decision}, but {unavailable[decision]}, so the task ran on {chosen}."
         decision = chosen
         action_idx = {"LOCAL": 0, "EDGE": 1, "CLOUD": 2}[chosen]
 

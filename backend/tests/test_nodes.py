@@ -96,6 +96,60 @@ class TestNodeMonitor(unittest.TestCase):
         self.assertEqual((state.cpu_load, state.task_queue, state.network_latency, state.bandwidth), (37.5, 3, 4.2, 0.18))
 
 
+class TestNodeLimits(unittest.TestCase):
+    """Tasks a node's host can't run (reported in /status) are routed elsewhere."""
+
+    def monitor(self, **cloud):
+        mon = NodeMonitor()
+        mon.nodes["cloud"] = NodeTelemetry("CLOUD", url="https://cloud.example", online=True, **cloud)
+        return mon
+
+    def test_status_reports_capabilities(self):
+        body = TestClient(node_app).get("/status").json()
+        self.assertIn("video", body["capabilities"])
+        self.assertIn("detector", body)
+
+    def test_video_skipped_without_ffmpeg(self):
+        mon = self.monitor(video_supported=False)
+        self.assertIn("videos", mon.cannot_run("cloud", "VIDEO", 1000))
+        self.assertIsNone(mon.cannot_run("cloud", "IMAGE", 1000))
+
+    def test_upload_over_node_limit_is_skipped(self):
+        mon = self.monitor(max_upload_mb=4.0)
+        self.assertIsNone(mon.cannot_run("cloud", "IMAGE", 3 * 1024 * 1024))
+        self.assertIn("4 MB limit", mon.cannot_run("cloud", "IMAGE_BATCH", 5 * 1024 * 1024))
+
+    def test_public_node_without_token_refuses_tasks(self):
+        from unittest import mock
+        import node.server as server
+
+        with mock.patch.multiple(server, NODE_REQUIRE_TOKEN=True, NODE_TOKEN=""):
+            client = TestClient(node_app)
+            self.assertEqual(client.get("/health").status_code, 200)
+            self.assertEqual(client.get("/status").status_code, 503)
+
+    def test_unconfigured_node_has_no_limits(self):
+        self.assertIsNone(NodeMonitor().cannot_run("edge", "VIDEO", 10**9))
+
+
+class TestOnnxEngine(unittest.TestCase):
+    """The Vercel cloud node runs the detector on ONNX Runtime; it must match PyTorch."""
+
+    def test_onnx_matches_pytorch(self):
+        try:
+            import onnxruntime  # noqa: F401
+        except ImportError:
+            self.skipTest("onnxruntime not installed")
+        from app.services import cv_executor as cv
+
+        image = __import__("PIL.Image", fromlist=["Image"]).open(SAMPLE_IMAGE).convert("RGB")
+        t_boxes, t_scores, t_labels = cv._TorchEngine()(image)
+        o_boxes, o_scores, o_labels = cv._OnnxEngine()(image)
+        keep_t, keep_o = t_scores >= 0.35, o_scores >= 0.35
+        self.assertEqual(list(t_labels[keep_t]), list(o_labels[keep_o]))
+        self.assertLess(abs(t_boxes[keep_t] - o_boxes[keep_o]).max(), 0.01)
+
+
 class TestNetworkEmulation(unittest.TestCase):
     """Single-laptop demo: a node can add an emulated link delay, and says so in /status."""
 

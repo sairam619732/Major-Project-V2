@@ -270,6 +270,8 @@ The numbers live in `backend/app/services/workload_limits.py` and `src/lib/simul
 ### Edge and cloud nodes (optional)
 The edge and cloud tiers can be real machines running the offloading node (`backend/node`). A node reports its own CPU load, memory and task queue, and runs the object detector on tasks sent to it. The backend checks each node every 3 s, measures the real network latency (round trip) and bandwidth (a 1 KB and a 2 MB upload timed back to back every 30 s; the difference is the transfer time), feeds these to the DQN, and sends the task to the node when the DQN picks that tier. A node that stops answering is shown as offline and gets no tasks.
 
+**Three machines (your laptop + a teammate's laptop as edge + Vercel as cloud):** follow [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), then start with `npm run present`.
+
 **Single-laptop demo (no second machine, no cloud account).** One command runs every tier on this laptop:
 ```bash
 npm run demo

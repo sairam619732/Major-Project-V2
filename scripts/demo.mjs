@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * Starts the project for a presentation.
+ *
+ *   npm run present         three machines: this laptop (local) runs the backend and web app; the
+ *                           edge and cloud nodes are the ones set in backend/.env (EDGE_NODE_URL,
+ *                           CLOUD_NODE_URL); see docs/DEPLOYMENT.md
+ *   npm run present -- --port=3001   web app on another port
+ *
  * Single-laptop demo: runs every tier on this machine.
  *
  *   npm run demo            production build + start (smoothest for presenting)
@@ -33,6 +40,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const backend = path.join(root, "backend");
 const isWin = process.platform === "win32";
 const dev = process.argv.includes("--dev");
+// --real: use the edge/cloud nodes from backend/.env instead of starting emulated ones here.
+const real = process.argv.includes("--real");
 const webPort = Number((process.argv.find((a) => a.startsWith("--port=")) ?? "--port=3000").split("=")[1]) || 3000;
 const venvPython = path.join(backend, ".venv", isWin ? "Scripts/python.exe" : "bin/python");
 const python = existsSync(venvPython) ? venvPython : isWin ? "python" : "python3";
@@ -132,7 +141,10 @@ async function waitFor(url, label, seconds = 120) {
 
 // ---------- Preflight ----------
 const busy = [];
-for (const [port, what] of [[8000, "backend"], [8100, "edge node"], [8200, "cloud node"], [webPort, "web app"]]) {
+const ports = real
+  ? [[8000, "backend"], [webPort, "web app"]]
+  : [[8000, "backend"], [8100, "edge node"], [8200, "cloud node"], [webPort, "web app"]];
+for (const [port, what] of ports) {
   if (await portInUse(port)) busy.push(`${port} (${what})`);
 }
 if (busy.length) {
@@ -152,7 +164,7 @@ if (!dev) {
 }
 
 // ---------- Start ----------
-for (const [tier, port] of [["edge", 8100], ["cloud", 8200]]) {
+for (const [tier, port] of real ? [] : [["edge", 8100], ["cloud", 8200]]) {
   const link = LINKS[tier];
   start(`${tier}-node`, python, ["-m", "node.run"], {
     cwd: backend,
@@ -171,21 +183,23 @@ for (const [tier, port] of [["edge", 8100], ["cloud", 8200]]) {
 
 start("backend", python, ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"], {
   cwd: backend,
-  // Set here, so they win over backend/.env for this run only.
-  env: {
-    EDGE_NODE_URL: "http://127.0.0.1:8100",
-    CLOUD_NODE_URL: "http://127.0.0.1:8200",
-    EDGE_NODE_TOKEN: "",
-    CLOUD_NODE_TOKEN: "",
-  },
+  // Demo: point at the local emulated nodes (set here, so they win over backend/.env for this run only).
+  // --real: no overrides, so backend/.env decides.
+  env: real
+    ? {}
+    : {
+        EDGE_NODE_URL: "http://127.0.0.1:8100",
+        CLOUD_NODE_URL: "http://127.0.0.1:8200",
+        EDGE_NODE_TOKEN: "",
+        CLOUD_NODE_TOKEN: "",
+      },
 });
 
 start("web", npx, ["next", dev ? "dev" : "start", "--port", String(webPort)]);
 
 const ready = (
   await Promise.all([
-    waitFor("http://127.0.0.1:8100/health", "Edge node"),
-    waitFor("http://127.0.0.1:8200/health", "Cloud node"),
+    ...(real ? [] : [waitFor("http://127.0.0.1:8100/health", "Edge node"), waitFor("http://127.0.0.1:8200/health", "Cloud node")]),
     waitFor("http://127.0.0.1:8000/health", "Backend"),
     waitFor(`http://127.0.0.1:${webPort}`, "Web app", 180),
   ])
@@ -193,6 +207,33 @@ const ready = (
 
 if (!ready) {
   stopAll();
+} else if (real) {
+  // Give the backend a few probes, then report each node as the app will show it.
+  await new Promise((r) => setTimeout(r, 12000));
+  let lines = ["   (could not read node status)"];
+  try {
+    const nodes = await (await fetch("http://127.0.0.1:8000/api/simulation/telemetry/nodes")).json();
+    lines = ["edge", "cloud"].map((tier) => {
+      const n = nodes[tier];
+      const name = tier.toUpperCase().padEnd(5);
+      if (!n.configured) return `   ${name} not set in backend/.env: simulated by the cost model`;
+      if (!n.online) return `   ${name} OFFLINE  ${n.url}  (${n.error ?? "not answering"})`;
+      return `   ${name} online   ${n.url}  ${n.network_latency_ms ?? "?"} ms, ${n.bandwidth_gbps ?? "?"} Gbps`;
+    });
+  } catch {
+    /* backend not answering yet */
+  }
+  console.log(`
+==========================================================
+ Presentation running
+   App        http://localhost:${webPort}   (open /simulation)
+   Backend    http://127.0.0.1:8000/docs
+ Nodes (from backend/.env):
+${lines.join("\n")}
+ An offline node gets no tasks; it comes back on its own once it answers.
+ Press Ctrl+C to stop.
+==========================================================
+`);
 } else {
   console.log(`
 ==========================================================

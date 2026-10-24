@@ -47,6 +47,10 @@ class NodeTelemetry:
     model_ready: Optional[bool] = None
     # The node's emulated-link settings (single-machine demo); None means a real network path.
     network_emulation: Optional[Dict[str, Any]] = None
+    # What the node's host can run (e.g. no video without ffmpeg; Vercel caps uploads at 4.5 MB).
+    video_supported: Optional[bool] = None
+    max_upload_mb: Optional[float] = None
+    detector: Optional[str] = None
     rtt_ms: Optional[float] = None
     bandwidth_gbps: Optional[float] = None
     last_seen: Optional[float] = None
@@ -78,6 +82,9 @@ class NodeTelemetry:
             "task_queue": self.task_queue,
             "model_ready": self.model_ready,
             "network_emulation": self.network_emulation,
+            "video_supported": self.video_supported,
+            "max_upload_mb": self.max_upload_mb,
+            "detector": self.detector,
             "network_latency_ms": self.rtt_ms,
             "bandwidth_gbps": self.bandwidth_gbps,
             "last_seen": self.last_seen,
@@ -142,6 +149,10 @@ class NodeMonitor:
             node.task_queue = data.get("task_queue")
             node.model_ready = data.get("model_ready")
             node.network_emulation = data.get("network_emulation")
+            caps = data.get("capabilities") or {}
+            node.video_supported = caps.get("video")
+            node.max_upload_mb = caps.get("max_upload_mb")
+            node.detector = data.get("detector")
             node.online = True
             node.last_seen = now
             node.error = None
@@ -186,6 +197,20 @@ class NodeMonitor:
         """Configured but not answering: the DQN must not send tasks there."""
         node = self.nodes[key]
         return node.configured and not node.online
+
+    def cannot_run(self, key: str, workload_type: str, upload_bytes: int) -> Optional[str]:
+        """Why this node can't take the task (as reported by the node), or None if it can."""
+        node = self.nodes[key]
+        if not node.configured:
+            return None
+        if workload_type.upper() in ("VIDEO", "VIDEO_STREAM", "STREAM") and node.video_supported is False:
+            return f"the {key} node can't process videos (no ffmpeg there)"
+        if node.max_upload_mb and upload_bytes > node.max_upload_mb * 1024 * 1024:
+            return (
+                f"the upload ({upload_bytes / (1024 * 1024):.1f} MB) is over the {key} node's "
+                f"{node.max_upload_mb:g} MB limit"
+            )
+        return None
 
     def live_state(self, key: str):
         """The node's real state for the DQN, or None when it is not live."""
