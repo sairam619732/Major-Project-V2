@@ -5,7 +5,7 @@ How to run EdgeOffload AI across three real machines for the presentation.
 | Tier | Machine | Runs | Address |
 | --- | --- | --- | --- |
 | **LOCAL** | Your laptop (i5 10th gen, 16 GB RAM, 256 GB SSD) | Backend (DQN, real local telemetry) + web app | `http://localhost:3000` |
-| **EDGE** | Teammate's laptop, on the same network | Offloading node (PyTorch detector) | `http://<teammate-ip>:8100` |
+| **EDGE** | Teammate's laptop, anywhere with internet (joined by Radmin VPN) | Offloading node (PyTorch detector) | `http://26.x.x.x:8100` |
 | **CLOUD** | Vercel (free Hobby plan), Mumbai region | Offloading node (same detector on ONNX Runtime) | `https://<project>.vercel.app` |
 
 Your laptop's backend checks both nodes every 3 s (real latency, bandwidth, CPU load, queue), feeds those values to the DQN, and sends each task to the tier the DQN picks. A node that stops answering is shown **OFFLINE** and gets no tasks.
@@ -16,7 +16,7 @@ Do the parts in this order: **0 → 3 (Vercel) → 2 (teammate) → 1 (your lapt
 
 ## Part 0. Get the code onto every machine (do this on the desktop)
 
-All recent work is committed on the desktop but not pushed. Push it so both laptops can download it:
+The code is on GitHub. After any new commit on the desktop, push it so both laptops get it (`git pull` on each laptop):
 
 ```powershell
 cd "C:\Users\saira\.gemini\config\Major Project V2"
@@ -102,30 +102,64 @@ To update the cloud node later (after code changes), repeat steps 2 and 4 (`depl
    ```
    (The first detection downloads the 14 MB detector weights once; it needs internet.)
 
-### Network (most important)
+### Network: connect the two laptops over the internet
 
-Both laptops must be on **the same network**, and that network must let laptops reach each other.
+The laptops don't need to be on the same Wi-Fi. They can be in different places (the teammate at home, you at college), each on its own internet connection. A free **virtual network** connects them; your laptop then reaches the edge node at a fixed address, and the backend measures the real internet latency and bandwidth to it.
 
-- **College or office Wi-Fi often blocks this** ("client isolation"). For the presentation, use a **phone hotspot** that both laptops join. It also gives your laptop internet for the cloud node.
-- On the teammate's laptop: **Settings → Network & internet → Wi-Fi → (the network) → Network profile type → Private**.
-- Allow the node through the firewall. In PowerShell **run as administrator**:
-  ```powershell
-  New-NetFirewallRule -DisplayName "EdgeOffload edge node" -Direction Inbound -Protocol TCP -LocalPort 8100 -Action Allow -Profile Private
-  ```
-  (Or click **Allow** on "Private networks" when Windows asks the first time the node starts.)
+**Option A: Radmin VPN (recommended: free, no account, Windows)**
+
+Do this on **both** laptops:
+1. Download Radmin VPN from <https://www.radmin-vpn.com> and install it.
+2. **Teammate's laptop:** **Network → Create network**. Choose a network name and a password, and send both to the presenter.
+3. **Your laptop:** **Network → Join network** with that name and password.
+4. Both laptops now appear in the Radmin VPN window, each with an address starting with **26.** (for example `26.18.104.7`). The teammate's address is the one you need.
+
+**Option B: Tailscale** (free, works on Windows, Mac and Linux, needs a Tailscale login)
+
+Install Tailscale from <https://tailscale.com/download> on both laptops and **sign in to the same Tailscale account** on both (or invite the teammate to your tailnet). Each laptop gets an address starting with **100.**
+
+**Option C: Cloudflare quick tunnel** (no install on your laptop; backup if neither VPN works)
+
+On the teammate's laptop, after starting the node (below), run in a second PowerShell window:
+```powershell
+winget install Cloudflare.cloudflared
+cloudflared tunnel --url http://localhost:8100
+```
+It prints an address like `https://random-words.trycloudflare.com`; that is the `EDGE_NODE_URL` (no `:8100`). The address **changes every time** the tunnel restarts, and the node is then reachable by anyone who has the address, so **use a key** (see "Access key" below). Traffic goes through Cloudflare's servers, so expect higher latency and lower bandwidth than a VPN (in testing: about 60 ms and 3.6 Mbps once warmed up, and slower for the first ~10 s).
+
+**Firewall (Options A and B).** Allow the node, but only for the virtual network. On the teammate's laptop, in PowerShell **run as administrator**:
+```powershell
+New-NetFirewallRule -DisplayName "EdgeOffload edge node (VPN)" -Direction Inbound -Protocol TCP -LocalPort 8100 -Action Allow -Profile Any -RemoteAddress 26.0.0.0/8,100.64.0.0/10
+```
+Option C needs no firewall rule (the tunnel connects outwards).
+
+**Mobile data.** If either laptop is on a phone hotspot, make the backend's bandwidth test lighter (it otherwise sends about 240 MB an hour). In your laptop's `backend\.env`:
+```
+BANDWIDTH_PROBE_MB=0.5
+BANDWIDTH_PROBE_INTERVAL_S=120
+```
 
 ### Start the edge node (every time)
 
 ```powershell
 cd Major-Project-V2\backend
+$env:NODE_TOKEN="the-edge-key"
 .\.venv\Scripts\python.exe -m node.run
 ```
 
-It prints a line like `Set EDGE_NODE_URL=http://192.168.43.57:8100`. Send that address to the presenter. Keep this window open, the laptop **plugged in**, and sleep turned off (**Settings → System → Power → Screen and sleep → Never** while presenting).
+It prints the address to use, for example:
+```
+  Over the internet (Radmin VPN): put this in the main backend's .env
+    EDGE_NODE_URL=http://26.18.104.7:8100
+```
+Send that line to the presenter (for Option C, send the `trycloudflare.com` address instead). If it says *No Radmin VPN or Tailscale address found*, the VPN isn't connected: open Radmin VPN or Tailscale and check that it's on.
 
-The address changes when the laptop joins a different network (for example, switching from college Wi-Fi to the hotspot). Check the printed line each time and update Part 1's `.env` if it changed.
+Keep this window open, the laptop **plugged in**, and sleep turned off (**Settings → System → Power → Screen and sleep → Never** while presenting). The Radmin VPN and Tailscale addresses stay the same across networks and restarts, so you only set them once.
 
-Optional: to require a key on the edge too, start it with `$env:NODE_TOKEN="some-key"; .\.venv\Scripts\python.exe -m node.run` and put the same key in `EDGE_NODE_TOKEN` on your laptop.
+**Access key.** Use the same key in `$env:NODE_TOKEN` here and in `EDGE_NODE_TOKEN` on your laptop. It's optional for Radmin VPN and Tailscale (only members of your virtual network can reach the node) and **required** for a Cloudflare tunnel. Make one with:
+```powershell
+.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(24))"
+```
 
 ---
 
@@ -160,16 +194,16 @@ notepad backend\.env
 ```
 Fill in these four lines (the rest can stay as they are):
 ```
-# The address printed on the teammate's laptop
-EDGE_NODE_URL=http://192.168.43.57:8100
-# Leave empty unless you set a key on the edge
-EDGE_NODE_TOKEN=
+# The address printed on the teammate's laptop (Radmin VPN: 26.x.x.x)
+EDGE_NODE_URL=http://26.18.104.7:8100
+# The edge key from Part 2 (empty if the edge has none)
+EDGE_NODE_TOKEN=the-edge-key
 # Your Vercel address and the key from Part 3, step 3
 CLOUD_NODE_URL=https://edgeoffload-cloud.vercel.app
 CLOUD_NODE_TOKEN=paste-the-key-here
 ```
 
-Before presenting, check that your laptop can reach the edge: open `http://<teammate-ip>:8100/health` in your browser. If it doesn't load, see Troubleshooting.
+Before presenting, check that your laptop can reach the edge: with Radmin VPN connected, open `http://26.x.x.x:8100/health` (the teammate's address) in your browser. If it doesn't load, see Troubleshooting.
 
 ### Start (every time)
 
@@ -181,7 +215,7 @@ npm run present
 This builds the web app (about a minute on an i5), starts the backend and the web app, and after a few seconds prints each node's status, for example:
 ```
  Nodes (from backend/.env):
-   EDGE  online   http://192.168.43.57:8100  8.4 ms, 0.21 Gbps
+   EDGE  online   http://26.18.104.7:8100  38.5 ms, 0.04 Gbps
    CLOUD online   https://edgeoffload-cloud.vercel.app  41.2 ms, 0.05 Gbps
 ```
 Open <http://localhost:3000/devices>: all three tiers should show **LIVE**. Then go to `/simulation` and run tasks. Press **Ctrl+C** in the window to stop everything.
@@ -198,9 +232,9 @@ If port 3000 is taken: `npm run present -- --port=3001`.
 
 ## Presentation-day checklist
 
-1. Phone hotspot on; **both laptops** joined to it.
-2. Teammate: start the edge node; send you the printed address.
-3. You: update `EDGE_NODE_URL` in `backend\.env` if the address changed.
+1. Both laptops online, with Radmin VPN open and **both shown in the same network**.
+2. Teammate: start the edge node. The printed Radmin address should match `EDGE_NODE_URL` in your `backend\.env`.
+3. You: open `http://26.x.x.x:8100/health` once to check the edge answers.
 4. Open `https://<project>.vercel.app/health` once to wake the cloud node.
 5. You: `npm run present`. All three nodes **online** in the printout, all **LIVE** on `/devices`.
 6. Run one test task on `/simulation` before the audience arrives.
@@ -211,7 +245,10 @@ If port 3000 is taken: `npm run present -- --port=3001`.
 
 | Problem | Fix |
 | --- | --- |
-| EDGE shows OFFLINE, `ConnectError` | Same network? Profile **Private**? Firewall rule added? Address changed? Test `http://<ip>:8100/health` from your laptop. College Wi-Fi often blocks laptop-to-laptop traffic: use a phone hotspot. |
+| EDGE shows OFFLINE, `ConnectError` or timeout | Is Radmin VPN open on **both** laptops, in the same network, with the teammate shown online? Is the edge node window still running? Was the firewall rule added (Part 2)? Test `http://26.x.x.x:8100/health` from your laptop. |
+| Radmin VPN shows the teammate as connected through a relay, or latency is high | It still works, just slower: the two networks blocked a direct link, so traffic goes through Radmin's servers. Try another network (e.g. a phone hotspot), or Tailscale (Option B). |
+| EDGE error `401` | `EDGE_NODE_TOKEN` on your laptop doesn't match `NODE_TOKEN` on the teammate's laptop. |
+| Cloudflare tunnel stopped working | The `trycloudflare.com` address changes every restart: copy the new one into `EDGE_NODE_URL` and restart `npm run present`. |
 | CLOUD shows OFFLINE right after starting | The Vercel instance is starting up; it turns online within ~30 s. Opening `/health` in a browser first helps. |
 | CLOUD error `401` | `CLOUD_NODE_TOKEN` on your laptop doesn't match `NODE_TOKEN` in Vercel. |
 | CLOUD error `503` "no NODE_TOKEN set" | Add `NODE_TOKEN` in Vercel (Part 3, step 5) and deploy again. |
@@ -224,7 +261,7 @@ If port 3000 is taken: `npm run present -- --port=3001`.
 
 ## Notes for the viva
 
-- **Real values:** local CPU, memory and battery (psutil on your laptop); each node's own CPU load, memory and task queue; latency and bandwidth measured by the backend over the real network every 3 s / 30 s.
+- **Real values:** local CPU, memory and battery (psutil on your laptop); each node's own CPU load, memory and task queue; latency and bandwidth measured by the backend over the real internet path every 3 s / 30 s. The edge is reached through Radmin VPN, a virtual network over the internet, so its latency includes that path.
 - **Same detector everywhere:** SSDLite320 MobileNetV3 with COCO weights. The cloud runs it on ONNX Runtime instead of PyTorch (Vercel's size limit), with identical results.
 - **Vercel is serverless:** the cloud's CPU load and queue are those of the function instance that answered, and Vercel may run several instances. Treat them as approximate.
 - **The DQN currently sends almost every task to LOCAL**, even when the cost model says the edge would be cheaper. That is the trained policy's behaviour, not a deployment problem. The routing to edge and cloud is in place and tested.

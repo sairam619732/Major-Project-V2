@@ -5,7 +5,8 @@ protected with NODE_TOKEN), a background loop checks each node every few seconds
   - latency: round-trip time of GET /health (average of the last few probes)
   - load: the node's own CPU load and task queue from GET /status
   - bandwidth: a 1 KB and a 2 MB upload to POST /echo back to back; the extra time the larger one
-    takes is the transfer time (every 30 s, averaged over the last few probes)
+    takes is the transfer time (every 30 s, averaged over the last few probes). Over a metered link
+    (e.g. a phone hotspot) make it lighter with BANDWIDTH_PROBE_MB and BANDWIDTH_PROBE_INTERVAL_S.
 A tier without a URL stays simulated (its values come from the UI's what-if settings).
 A configured node that stops answering is reported offline, never with made-up values.
 """
@@ -92,6 +93,13 @@ class NodeTelemetry:
         }
 
 
+def _env_number(name: str, default: float, minimum: float) -> float:
+    try:
+        return max(minimum, float(os.getenv(name, "") or default))
+    except ValueError:
+        return default
+
+
 class NodeMonitor:
     """Keeps live telemetry for the edge and cloud nodes and sends tasks to them."""
 
@@ -99,9 +107,15 @@ class NodeMonitor:
         self.nodes: Dict[str, NodeTelemetry] = {"edge": NodeTelemetry("EDGE"), "cloud": NodeTelemetry("CLOUD")}
         self._client: Optional[httpx.AsyncClient] = None
         self._task: Optional[asyncio.Task] = None
+        self.bandwidth_interval_s = BANDWIDTH_INTERVAL_S
+        self.bandwidth_probe_bytes = BANDWIDTH_PROBE_BYTES
 
     async def start(self) -> None:
-        # Read the URLs here, not at import: main.py loads backend/.env after importing the routers.
+        # Read the settings here, not at import: main.py loads backend/.env after importing the routers.
+        self.bandwidth_interval_s = _env_number("BANDWIDTH_PROBE_INTERVAL_S", BANDWIDTH_INTERVAL_S, 5.0)
+        # At most 3.5 MB: nodes refuse probe blocks over 4 MB (and Vercel requests over 4.5 MB).
+        probe_mb = min(3.5, _env_number("BANDWIDTH_PROBE_MB", BANDWIDTH_PROBE_BYTES / 2**20, 0.25))
+        self.bandwidth_probe_bytes = int(probe_mb * 2**20)
         for key in ("edge", "cloud"):
             url = os.getenv(f"{key.upper()}_NODE_URL", "").strip().rstrip("/")
             self.nodes[key].url = url or None
@@ -156,7 +170,7 @@ class NodeMonitor:
             node.online = True
             node.last_seen = now
             node.error = None
-            if node.bandwidth_gbps is None or now - node.last_bandwidth_at >= BANDWIDTH_INTERVAL_S:
+            if node.bandwidth_gbps is None or now - node.last_bandwidth_at >= self.bandwidth_interval_s:
                 await self._measure_bandwidth(node)
         except Exception as exc:  # unreachable, timeout, bad response
             node.error = f"{type(exc).__name__}: {exc}"[:200]
@@ -177,9 +191,9 @@ class NodeMonitor:
         # what the extra bytes took to transfer. (Subtracting an average RTT instead let a few ms of
         # jitter swamp the transfer time on fast links.)
         small_s = await self._timed_echo(node, BANDWIDTH_BASE_BYTES)
-        large_s = await self._timed_echo(node, BANDWIDTH_PROBE_BYTES)
+        large_s = await self._timed_echo(node, self.bandwidth_probe_bytes)
         transfer_s = max(large_s - small_s, 0.001)
-        gbps = (BANDWIDTH_PROBE_BYTES - BANDWIDTH_BASE_BYTES) * 8 / transfer_s / 1e9
+        gbps = (self.bandwidth_probe_bytes - BANDWIDTH_BASE_BYTES) * 8 / transfer_s / 1e9
         node.bandwidth_samples = (node.bandwidth_samples + [gbps])[-BANDWIDTH_SAMPLES:]
         node.bandwidth_gbps = round(sum(node.bandwidth_samples) / len(node.bandwidth_samples), 4)
         node.last_bandwidth_at = time.time()

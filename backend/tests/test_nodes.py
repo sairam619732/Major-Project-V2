@@ -132,6 +132,29 @@ class TestNodeLimits(unittest.TestCase):
         self.assertIsNone(NodeMonitor().cannot_run("edge", "VIDEO", 10**9))
 
 
+class TestBandwidthProbeSettings(unittest.TestCase):
+    """The bandwidth test can be made lighter for metered internet links, within node limits."""
+
+    def started(self, **env):
+        from unittest import mock
+
+        mon = NodeMonitor()
+        with mock.patch.dict("os.environ", {"EDGE_NODE_URL": "", "CLOUD_NODE_URL": "", **env}):
+            asyncio.run(mon.start())
+        return mon
+
+    def test_defaults(self):
+        mon = self.started()
+        self.assertEqual((mon.bandwidth_probe_bytes, mon.bandwidth_interval_s), (2 * 2**20, 30.0))
+
+    def test_lighter_probe(self):
+        mon = self.started(BANDWIDTH_PROBE_MB="0.5", BANDWIDTH_PROBE_INTERVAL_S="120")
+        self.assertEqual((mon.bandwidth_probe_bytes, mon.bandwidth_interval_s), (2**19, 120.0))
+
+    def test_probe_capped_below_node_limit(self):
+        self.assertEqual(self.started(BANDWIDTH_PROBE_MB="50").bandwidth_probe_bytes, int(3.5 * 2**20))
+
+
 class TestOnnxEngine(unittest.TestCase):
     """The Vercel cloud node runs the detector on ONNX Runtime; it must match PyTorch."""
 
