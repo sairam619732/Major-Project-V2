@@ -123,6 +123,8 @@ export interface NodeTelemetry {
   memory_total_gb: number | null;
   task_queue: number | null;
   model_ready: boolean | null;
+  /** Set when the node adds an emulated network delay (all tiers on one machine); null = real network. */
+  network_emulation?: { rtt_ms: number; jitter_ms: number; bandwidth_mbps: number | null } | null;
   network_latency_ms: number | null;
   bandwidth_gbps: number | null;
   last_seen: number | null;
@@ -143,6 +145,15 @@ export function isNodeLive(node: NodeTelemetry | null | undefined): boolean {
 export function nodeSource(node: NodeTelemetry | null | undefined): "live" | "offline" | "sim" {
   if (isNodeLive(node)) return "live";
   return node?.configured ? "offline" : "sim";
+}
+
+/**
+ * Where a tier's latency and bandwidth come from. Same as nodeSource, except a live node on an
+ * emulated link (single-machine demo) is "emu": measured, but over an emulated network delay.
+ */
+export function linkSource(node: NodeTelemetry | null | undefined): "live" | "emu" | "offline" | "sim" {
+  const source = nodeSource(node);
+  return source === "live" && node?.network_emulation ? "emu" : source;
 }
 
 /** Fetches the edge/cloud node telemetry measured by the backend. */

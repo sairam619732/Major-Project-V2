@@ -1,7 +1,7 @@
 "use client";
 
 import { useSimulationState } from "@/lib/simulation/simulationState";
-import { nodeSource } from "@/services/apiClient";
+import { linkSource } from "@/services/apiClient";
 
 const TIERS = {
   edge: { title: "Edge Server", color: "#34d399" },
@@ -10,6 +10,7 @@ const TIERS = {
 
 const SOURCE_TAG = {
   live: { text: "LIVE", cls: "text-emerald-300" },
+  emu: { text: "LIVE · EMU NET", cls: "text-orange-300" },
   offline: { text: "OFFLINE", cls: "text-rose-300" },
   sim: { text: "SIM", cls: "text-slate-400" },
 } as const;
@@ -20,7 +21,7 @@ const unit = (v: number | string, suffix: string) => (typeof v === "number" ? `$
 function TelemetryCard({ tier }: { tier: keyof typeof TIERS }) {
   const { state, nodeTelemetry } = useSimulationState();
   const { title, color } = TIERS[tier];
-  const source = nodeSource(nodeTelemetry?.[tier]);
+  const source = linkSource(nodeTelemetry?.[tier]);
   // An offline node has no current readings; show dashes rather than the what-if values.
   const node = source === "offline"
     ? { cpuLoadPct: "—", queueLength: "—", latencyMs: "—", bandwidthGbps: "—" }

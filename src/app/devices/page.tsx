@@ -34,7 +34,11 @@ function TierCard({ tier, title, accent }: { tier: "edge" | "cloud"; title: stri
             `Queue: ${node.task_queue} tasks`,
             `Latency: ${node.network_latency_ms} ms · Bandwidth: ${node.bandwidth_gbps} Gbps`,
           ],
-          footer: "Measured every 3 s",
+          footer: node.network_emulation
+            ? `Measured every 3 s · network emulated on this machine (${node.network_emulation.rtt_ms} ms round trip${
+                node.network_emulation.bandwidth_mbps ? `, ${node.network_emulation.bandwidth_mbps} Mbps` : ""
+              })`
+            : "Measured every 3 s",
         }
       : source === "offline" && node
         ? {

@@ -55,3 +55,4 @@ venv/
 
 # Assembled Hugging Face Space for the cloud node (backend/scripts/build_hf_space.py)
 /backend/dist/
+.demo-pids.json

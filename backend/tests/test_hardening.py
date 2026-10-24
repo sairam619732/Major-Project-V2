@@ -69,7 +69,7 @@ class TestNodeInputs(unittest.TestCase):
         self.assertEqual(res.status_code, 400)
 
     def test_echo_refuses_huge_blocks(self):
-        res = TestClient(node_app).post("/echo", content=b"x" * (3 * 1024 * 1024))
+        res = TestClient(node_app).post("/echo", content=b"x" * (5 * 1024 * 1024))
         self.assertEqual(res.status_code, 413)
 
 

@@ -4,7 +4,8 @@ When EDGE_NODE_URL / CLOUD_NODE_URL are set (plus EDGE_NODE_TOKEN / CLOUD_NODE_T
 protected with NODE_TOKEN), a background loop checks each node every few seconds:
   - latency: round-trip time of GET /health (average of the last few probes)
   - load: the node's own CPU load and task queue from GET /status
-  - bandwidth: time to upload a 512 KB block to POST /echo (every 30 s)
+  - bandwidth: a 1 KB and a 2 MB upload to POST /echo back to back; the extra time the larger one
+    takes is the transfer time (every 30 s, averaged over the last few probes)
 A tier without a URL stays simulated (its values come from the UI's what-if settings).
 A configured node that stops answering is reported offline, never with made-up values.
 """
@@ -21,7 +22,9 @@ from app.models.system import CloudNodeState, EdgeNodeState
 
 PROBE_INTERVAL_S = 3.0
 BANDWIDTH_INTERVAL_S = 30.0
-BANDWIDTH_PROBE_BYTES = 512 * 1024
+BANDWIDTH_PROBE_BYTES = 2 * 1024 * 1024
+BANDWIDTH_BASE_BYTES = 1024
+BANDWIDTH_SAMPLES = 3
 OFFLINE_AFTER_S = 10.0
 RTT_SAMPLES = 5
 PROBE_TIMEOUT_S = 5.0
@@ -42,12 +45,15 @@ class NodeTelemetry:
     memory_total_gb: Optional[float] = None
     task_queue: Optional[int] = None
     model_ready: Optional[bool] = None
+    # The node's emulated-link settings (single-machine demo); None means a real network path.
+    network_emulation: Optional[Dict[str, Any]] = None
     rtt_ms: Optional[float] = None
     bandwidth_gbps: Optional[float] = None
     last_seen: Optional[float] = None
     last_bandwidth_at: float = 0.0
     error: Optional[str] = None
     rtt_samples: List[float] = field(default_factory=list)
+    bandwidth_samples: List[float] = field(default_factory=list)
 
     @property
     def configured(self) -> bool:
@@ -71,6 +77,7 @@ class NodeTelemetry:
             "memory_total_gb": self.memory_total_gb,
             "task_queue": self.task_queue,
             "model_ready": self.model_ready,
+            "network_emulation": self.network_emulation,
             "network_latency_ms": self.rtt_ms,
             "bandwidth_gbps": self.bandwidth_gbps,
             "last_seen": self.last_seen,
@@ -134,6 +141,7 @@ class NodeMonitor:
             node.memory_total_gb = data.get("memory_total_gb")
             node.task_queue = data.get("task_queue")
             node.model_ready = data.get("model_ready")
+            node.network_emulation = data.get("network_emulation")
             node.online = True
             node.last_seen = now
             node.error = None
@@ -144,16 +152,25 @@ class NodeMonitor:
             if node.last_seen is None or now - node.last_seen > OFFLINE_AFTER_S:
                 node.online = False
 
-    async def _measure_bandwidth(self, node: NodeTelemetry) -> None:
+    async def _timed_echo(self, node: NodeTelemetry, size: int) -> float:
         assert self._client is not None
-        block = os.urandom(BANDWIDTH_PROBE_BYTES)
+        block = os.urandom(size)
         started = time.perf_counter()
-        res = await self._client.post(f"{node.url}/echo", content=block, timeout=PROBE_TIMEOUT_S * 4, headers=node.headers)
+        res = await self._client.post(f"{node.url}/echo", content=block, timeout=PROBE_TIMEOUT_S * 6, headers=node.headers)
         elapsed_s = time.perf_counter() - started
         res.raise_for_status()
-        # Subtract one round trip (request/response overhead) to estimate the pure transfer time.
-        transfer_s = max(elapsed_s - (node.rtt_ms or 0.0) / 1000.0, 0.001)
-        node.bandwidth_gbps = round(BANDWIDTH_PROBE_BYTES * 8 / transfer_s / 1e9, 4)
+        return elapsed_s
+
+    async def _measure_bandwidth(self, node: NodeTelemetry) -> None:
+        # Latency and request overhead are the same for both uploads, so the difference in time is
+        # what the extra bytes took to transfer. (Subtracting an average RTT instead let a few ms of
+        # jitter swamp the transfer time on fast links.)
+        small_s = await self._timed_echo(node, BANDWIDTH_BASE_BYTES)
+        large_s = await self._timed_echo(node, BANDWIDTH_PROBE_BYTES)
+        transfer_s = max(large_s - small_s, 0.001)
+        gbps = (BANDWIDTH_PROBE_BYTES - BANDWIDTH_BASE_BYTES) * 8 / transfer_s / 1e9
+        node.bandwidth_samples = (node.bandwidth_samples + [gbps])[-BANDWIDTH_SAMPLES:]
+        node.bandwidth_gbps = round(sum(node.bandwidth_samples) / len(node.bandwidth_samples), 4)
         node.last_bandwidth_at = time.time()
 
     # ---------- Used by the API ----------

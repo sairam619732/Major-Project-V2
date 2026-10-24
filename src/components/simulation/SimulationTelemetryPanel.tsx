@@ -1,7 +1,7 @@
 "use client";
 
 import { simulationStore, useSimulationState } from "@/lib/simulation/simulationState";
-import { nodeSource } from "@/services/apiClient";
+import { linkSource, nodeSource } from "@/services/apiClient";
 
 import { useEffect, useState } from "react";
 
@@ -34,6 +34,7 @@ const SOURCE_STYLES = {
   est: "text-slate-300 border-white/[0.12]",
   set: "text-slate-300 border-white/[0.12]",
   live: "text-emerald-300 border-emerald-500/30",
+  emu: "text-orange-300 border-orange-500/30",
   sim: "text-violet-300 border-violet-500/30",
   assumed: "text-amber-300 border-amber-500/30",
   offline: "text-rose-300 border-rose-500/30",
@@ -53,12 +54,17 @@ export function SimulationTelemetryPanel() {
   // Edge/cloud inputs are live when a node is connected, otherwise the what-if settings.
   const edgeSource: FeatureSource = nodeSource(nodeTelemetry?.edge);
   const cloudSource: FeatureSource = nodeSource(nodeTelemetry?.cloud);
+  // Latency/bandwidth: "emu" when the node is live but its network delay is emulated (one-machine demo).
+  const edgeLink: FeatureSource = linkSource(nodeTelemetry?.edge);
+  const cloudLink: FeatureSource = linkSource(nodeTelemetry?.cloud);
   const latencyBadge =
-    edgeSource === "live" && cloudSource === "live"
+    edgeLink === "live" && cloudLink === "live"
       ? { text: "LIVE", cls: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10" }
-      : edgeSource === "sim" && cloudSource === "sim"
-        ? { text: "SIMULATED", cls: "text-violet-300 border-violet-500/30 bg-violet-500/10" }
-        : { text: `EDGE ${edgeSource.toUpperCase()} · CLOUD ${cloudSource.toUpperCase()}`, cls: "text-slate-300 border-white/[0.12]" };
+      : edgeLink === "emu" && cloudLink === "emu"
+        ? { text: "LIVE NODES · EMULATED NETWORK", cls: "text-orange-300 border-orange-500/30 bg-orange-500/10" }
+        : edgeLink === "sim" && cloudLink === "sim"
+          ? { text: "SIMULATED", cls: "text-violet-300 border-violet-500/30 bg-violet-500/10" }
+          : { text: `EDGE ${edgeLink.toUpperCase()} · CLOUD ${cloudLink.toUpperCase()}`, cls: "text-slate-300 border-white/[0.12]" };
   const [dqnExpanded, setDqnExpanded] = useState(false);
   
   // Poll the backend's psutil telemetry while this panel is on screen (shared poller).
@@ -89,12 +95,12 @@ export function SimulationTelemetryPanel() {
     { name: "Local Base Latency", value: localValue(`${state.device.latencyMs} ms`), key: 8, source: isLocalReal ? "assumed" : "offline" },
     { name: "Edge CPU Load", value: `${state.edge.cpuLoadPct}%`, key: 9, source: edgeSource },
     { name: "Edge Task Queue", value: `${state.edge.queueLength}`, key: 10, source: edgeSource },
-    { name: "Edge Network Lat", value: `${state.edge.latencyMs} ms`, key: 11, source: edgeSource },
-    { name: "Edge Bandwidth", value: `${state.edge.bandwidthGbps} Gbps`, key: 12, source: edgeSource },
+    { name: "Edge Network Lat", value: `${state.edge.latencyMs} ms`, key: 11, source: edgeLink },
+    { name: "Edge Bandwidth", value: `${state.edge.bandwidthGbps} Gbps`, key: 12, source: edgeLink },
     { name: "Cloud CPU Load", value: `${state.cloud.cpuLoadPct}%`, key: 13, source: cloudSource },
     { name: "Cloud Task Queue", value: `${state.cloud.queueLength}`, key: 14, source: cloudSource },
-    { name: "Cloud Network Lat", value: `${state.cloud.latencyMs} ms`, key: 15, source: cloudSource },
-    { name: "Cloud Bandwidth", value: `${state.cloud.bandwidthGbps} Gbps`, key: 16, source: cloudSource },
+    { name: "Cloud Network Lat", value: `${state.cloud.latencyMs} ms`, key: 15, source: cloudLink },
+    { name: "Cloud Bandwidth", value: `${state.cloud.bandwidthGbps} Gbps`, key: 16, source: cloudLink },
   ];
 
   return (

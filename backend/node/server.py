@@ -9,11 +9,20 @@ Configure with environment variables:
   NODE_ID     a name shown in the UI (default: <tier>-<hostname>)
   NODE_TOKEN  optional access key; when set, every request except /health must send it in the
               X-Node-Token header (use it for a node on the public internet)
+
+Network emulation (for running every tier on one machine, e.g. a single-laptop demo). Off unless set:
+  NODE_EMULATED_RTT_MS          extra round-trip delay added to every request (e.g. 20 for edge, 90 for cloud)
+  NODE_EMULATED_JITTER_MS       random +/- variation of that delay
+  NODE_EMULATED_BANDWIDTH_MBPS  link speed: request and response bodies are delayed by size / speed
+The node really waits, so the backend's normal measurements see the emulated link. /status reports
+the settings so the UI can label these values as emulated, never as a real network.
 """
 
+import asyncio
 import hmac
 import os
 import platform
+import random
 import socket
 import threading
 import time
@@ -31,6 +40,30 @@ NODE_TIER = os.getenv("NODE_TIER", "EDGE").upper()
 NODE_ID = os.getenv("NODE_ID", f"{NODE_TIER.lower()}-{socket.gethostname().lower()}")
 NODE_TOKEN = os.getenv("NODE_TOKEN", "")
 
+
+def _env_float(name: str) -> float:
+    try:
+        return max(0.0, float(os.getenv(name, "0") or 0))
+    except ValueError:
+        return 0.0
+
+
+EMULATED_RTT_MS = _env_float("NODE_EMULATED_RTT_MS")
+EMULATED_JITTER_MS = _env_float("NODE_EMULATED_JITTER_MS")
+EMULATED_BANDWIDTH_MBPS = _env_float("NODE_EMULATED_BANDWIDTH_MBPS")
+NETWORK_EMULATION = (
+    {"rtt_ms": EMULATED_RTT_MS, "jitter_ms": EMULATED_JITTER_MS, "bandwidth_mbps": EMULATED_BANDWIDTH_MBPS or None}
+    if EMULATED_RTT_MS or EMULATED_BANDWIDTH_MBPS
+    else None
+)
+
+
+def _transfer_s(size_bytes: int) -> float:
+    """Time to move size_bytes over the emulated link."""
+    if not EMULATED_BANDWIDTH_MBPS or size_bytes <= 0:
+        return 0.0
+    return size_bytes * 8 / (EMULATED_BANDWIDTH_MBPS * 1_000_000)
+
 app = FastAPI(
     title=f"Offloading Node ({NODE_TIER})",
     version="1.0.0",
@@ -47,8 +80,29 @@ async def require_token(request: Request, call_next):
             return JSONResponse({"detail": "Missing or wrong X-Node-Token"}, status_code=status.HTTP_401_UNAUTHORIZED)
     return await call_next(request)
 
-# The backend's bandwidth probe sends 512 KB; refuse anything much larger.
-ECHO_MAX_BYTES = 2 * 1024 * 1024
+
+@app.middleware("http")
+async def emulate_network(request: Request, call_next):
+    """With network emulation on, delay each request like a real link of that latency and speed."""
+    if NETWORK_EMULATION is None:
+        return await call_next(request)
+    half_rtt_s = max(0.0, EMULATED_RTT_MS + random.uniform(-EMULATED_JITTER_MS, EMULATED_JITTER_MS)) / 2000.0
+    try:
+        upload_bytes = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        upload_bytes = 0
+    await asyncio.sleep(half_rtt_s + _transfer_s(upload_bytes))  # request travelling to the node
+    response = await call_next(request)
+    try:
+        download_bytes = int(response.headers.get("content-length", "0"))
+    except ValueError:
+        download_bytes = 0
+    await asyncio.sleep(half_rtt_s + _transfer_s(download_bytes))  # response travelling back
+    return response
+
+
+# The backend's bandwidth probe sends 2 MB; refuse anything much larger.
+ECHO_MAX_BYTES = 4 * 1024 * 1024
 
 # Tasks received but not finished yet: the node's real queue length.
 _queue_lock = threading.Lock()
@@ -84,6 +138,8 @@ async def node_status():
         "memory_total_gb": round(mem.total / (1024**3), 1),
         "task_queue": _in_flight,
         "model_ready": cv_executor.is_loaded,
+        # Set when this node adds an emulated network delay (single-machine demo); None = real network.
+        "network_emulation": NETWORK_EMULATION,
         "timestamp": time.time(),
     }
 

@@ -268,7 +268,16 @@ Sized for ordinary laptops and free CPU servers, and checked in the browser, the
 The numbers live in `backend/app/services/workload_limits.py` and `src/lib/simulation/workloadLimits.ts`.
 
 ### Edge and cloud nodes (optional)
-The edge and cloud tiers can be real machines running the offloading node (`backend/node`). A node reports its own CPU load, memory and task queue, and runs the object detector on tasks sent to it. The backend checks each node every 3 s, measures the real network latency (round trip) and bandwidth (a timed 512 KB upload every 30 s), feeds these to the DQN, and sends the task to the node when the DQN picks that tier. A node that stops answering is shown as offline and gets no tasks.
+The edge and cloud tiers can be real machines running the offloading node (`backend/node`). A node reports its own CPU load, memory and task queue, and runs the object detector on tasks sent to it. The backend checks each node every 3 s, measures the real network latency (round trip) and bandwidth (a 1 KB and a 2 MB upload timed back to back every 30 s; the difference is the transfer time), feeds these to the DQN, and sends the task to the node when the DQN picks that tier. A node that stops answering is shown as offline and gets no tasks.
+
+**Single-laptop demo (no second machine, no cloud account).** One command runs every tier on this laptop:
+```bash
+npm run demo
+```
+It builds the web app and starts four programs: the edge node (port 8100), the cloud node (8200), the backend (8000) and the web app (http://localhost:3000; use `npm run demo -- --port=3001` if 3000 is taken). Ctrl+C stops them all; `npm run demo:stop` stops a demo whose window was closed. `backend/.env` is not changed.
+- **Real:** object detection runs inside each node program, and each node's CPU load and task queue are read with psutil. The backend measures latency and bandwidth to each node as usual.
+- **Emulated:** the network. Each node delays its own traffic like a real link: edge 20 ms round trip and 300 Mbps (nearby server over Wi-Fi), cloud 90 ms and 50 Mbps (datacenter over home broadband). The settings are in `scripts/demo.mjs` (`NODE_EMULATED_RTT_MS`, `NODE_EMULATED_JITTER_MS` and `NODE_EMULATED_BANDWIDTH_MBPS` on a node).
+- The app labels these links **EMULATED NETWORK** (orange), never as live network readings. All tiers share this laptop's CPU, so edge and cloud compute is no faster than local here.
 
 **Edge (a PC on the same Wi-Fi).** On that PC, set up the backend as in section 9, then:
 ```powershell

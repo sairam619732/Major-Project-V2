@@ -96,5 +96,35 @@ class TestNodeMonitor(unittest.TestCase):
         self.assertEqual((state.cpu_load, state.task_queue, state.network_latency, state.bandwidth), (37.5, 3, 4.2, 0.18))
 
 
+class TestNetworkEmulation(unittest.TestCase):
+    """Single-laptop demo: a node can add an emulated link delay, and says so in /status."""
+
+    def test_no_emulation_by_default(self):
+        self.assertIsNone(TestClient(node_app).get("/status").json()["network_emulation"])
+
+    def test_emulated_delay_is_applied_and_reported(self):
+        import time
+        from unittest import mock
+        import node.server as server
+
+        settings = {"rtt_ms": 80.0, "jitter_ms": 0.0, "bandwidth_mbps": 8.0}
+        with mock.patch.multiple(
+            server,
+            NETWORK_EMULATION=settings,
+            EMULATED_RTT_MS=80.0,
+            EMULATED_JITTER_MS=0.0,
+            EMULATED_BANDWIDTH_MBPS=8.0,
+        ):
+            client = TestClient(node_app)
+            self.assertEqual(client.get("/status").json()["network_emulation"], settings)
+            started = time.perf_counter()
+            client.get("/health")
+            self.assertGreaterEqual(time.perf_counter() - started, 0.075)
+            # 100 KB at 8 Mbps takes 0.1 s on top of the 80 ms round trip.
+            started = time.perf_counter()
+            client.post("/echo", content=b"x" * 100_000)
+            self.assertGreaterEqual(time.perf_counter() - started, 0.17)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
