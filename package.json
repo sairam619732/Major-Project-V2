@@ -12,7 +12,8 @@
     "check:quick": "node scripts/check.mjs --quick",
     "demo": "node scripts/demo.mjs",
     "demo:stop": "node scripts/demo.mjs --stop",
-    "present": "node scripts/demo.mjs --real"
+    "present": "node scripts/demo.mjs --real",
+    "present:backend": "node scripts/demo.mjs --real --backend-only"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

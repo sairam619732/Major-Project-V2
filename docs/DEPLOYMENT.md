@@ -4,13 +4,16 @@ How to run EdgeOffload AI across three real machines for the presentation.
 
 | Tier | Machine | Runs | Address |
 | --- | --- | --- | --- |
-| **LOCAL** | Your laptop (i5 10th gen, 16 GB RAM, 256 GB SSD) | Backend (DQN, real local telemetry) + web app | `http://localhost:3000` |
+| **WEB APP** | Vercel (free Hobby plan) | The Next.js site, opened in Chrome on your laptop | `https://edgeoffload-ai.vercel.app` |
+| **LOCAL** | Your laptop (i5 10th gen, 16 GB RAM, 256 GB SSD) | Backend (DQN, real local telemetry of this laptop) | `http://localhost:8000` |
 | **EDGE** | Teammate's laptop, anywhere with internet (joined by Radmin VPN) | Offloading node (PyTorch detector) | `http://26.x.x.x:8100` |
 | **CLOUD** | Vercel (free Hobby plan), Mumbai region | Offloading node (same detector on ONNX Runtime) | `https://<project>.vercel.app` |
 
 Your laptop's backend checks both nodes every 3 s (real latency, bandwidth, CPU load, queue), feeds those values to the DQN, and sends each task to the tier the DQN picks. A node that stops answering is shown **OFFLINE** and gets no tasks.
 
-Do the parts in this order: **0 → 3 (Vercel) → 2 (teammate) → 1 (your laptop)**, because your laptop's settings need the other two addresses.
+The web app's pages come from Vercel, but they run in **your** browser and call the backend on **your** laptop (`localhost:8000`); that is why the local tier's readings are your laptop's. Someone opening the site on another computer sees "Backend offline" unless that computer runs the backend too.
+
+Do the parts in this order: **0 → 3 (cloud node) → 4 (web app) → 2 (teammate) → 1 (your laptop)**, because your laptop's settings need the other addresses. Parts 3 and 4 are already done.
 
 ---
 
@@ -78,6 +81,23 @@ The build keeps `dist\vercel-node\.vercel` (the link to the Vercel project), so 
 4. Check `https://<project>.vercel.app/health` in a browser. If a Vercel login page appears instead, turn off **Settings → Deployment Protection → Vercel Authentication** for the project.
 
 What the deploy folder needs (already set in `backend/deploy/vercel/`): `vercel.json` with `"framework": "fastapi"` and the region, and `pyproject.toml` with the dependencies and `entrypoint = "index:app"`. Without the framework setting, Vercel builds nothing (404). Vercel installs dependencies from `pyproject.toml`, not from a `requirements.txt` next to it.
+
+---
+
+## Part 4. Web app on Vercel (done; from the desktop)
+
+**Status: deployed** at **https://edgeoffload-ai.vercel.app** (Vercel project `edgeoffload-ai`, Mumbai). The pages, the 3D scenes and the dataset page (`/api/dataset`) are served by Vercel; everything the DQN uses comes from the backend on the laptop that opens the site.
+
+- The backend allows this site's address (`FRONTEND_URL` in `backend/.env`, default `https://edgeoffload-ai.vercel.app`) and answers Chrome's local-network check, so the site may call `http://localhost:8000`.
+- `.vercelignore` keeps the backend, Python environments, tests and every `.env` file out of the upload; `vercel.json` sets Next.js and the Mumbai region.
+
+**Update the site after frontend changes** (on the desktop, from the project folder, which is linked to the Vercel project):
+```powershell
+cd "C:\Users\saira\.gemini\config\Major Project V2"
+npx --yes vercel@65.2.0 deploy --prod --yes
+```
+
+**From scratch:** in the project folder run `npx --yes vercel@65.2.0 link --yes --project edgeoffload-ai`, then the deploy command above. `link` also writes a Vercel token into `.env.local`; it is not uploaded (`.vercelignore`), but you can delete that line.
 
 ---
 
@@ -202,20 +222,22 @@ Before presenting, check that your laptop can reach the edge: with Radmin VPN co
 
 ### Start (every time)
 
+The web app is hosted on Vercel at **https://edgeoffload-ai.vercel.app** (Part 4), so your laptop only runs the backend:
+
 ```powershell
 cd Major-Project-V2
-npm run present
+npm run present:backend
 ```
 
-This builds the web app (about a minute on an i5), starts the backend and the web app, and after a few seconds prints each node's status, for example:
+After a few seconds it prints each node's status, for example:
 ```
  Nodes (from backend/.env):
    EDGE  online   http://26.18.104.7:8100  38.5 ms, 0.04 Gbps
    CLOUD online   https://edgeoffload-cloud.vercel.app  41.2 ms, 0.05 Gbps
 ```
-Open <http://localhost:3000/devices>: all three tiers should show **LIVE**. Then go to `/simulation` and run tasks. Press **Ctrl+C** in the window to stop everything.
+Open **https://edgeoffload-ai.vercel.app/devices** in Chrome. The first time, Chrome asks whether the site may **access devices on your local network**: click **Allow** (the site needs it to reach the backend on your laptop). All three tiers should show **LIVE**. Then go to `/simulation` and run tasks. Press **Ctrl+C** in the window to stop the backend.
 
-If port 3000 is taken: `npm run present -- --port=3001`.
+**Backup (no internet for the site, or Chrome blocks it):** `npm run present` builds and runs the web app on your laptop too (about a minute on an i5); open <http://localhost:3000> instead. If port 3000 is taken: `npm run present -- --port=3001`.
 
 ### Tips for your laptop (i5 10th gen, Intel graphics)
 
@@ -231,7 +253,7 @@ If port 3000 is taken: `npm run present -- --port=3001`.
 2. Teammate: start the edge node. The printed Radmin address should match `EDGE_NODE_URL` in your `backend\.env`.
 3. You: open `http://26.x.x.x:8100/health` once to check the edge answers.
 4. Open `https://edgeoffload-cloud.vercel.app/health` once to wake the cloud node.
-5. You: `npm run present`. All three nodes **online** in the printout, all **LIVE** on `/devices`.
+5. You: `npm run present:backend`. Both nodes **online** in the printout. Open https://edgeoffload-ai.vercel.app/devices in Chrome (allow local network access if asked): all three tiers **LIVE**.
 6. Run one test task on `/simulation` before the audience arrives.
 
 ---
@@ -250,7 +272,7 @@ If port 3000 is taken: `npm run present -- --port=3001`.
 | A task says "over the cloud node's 4 MB limit" | Expected: Vercel accepts at most 4.5 MB per request, so that task ran on another tier. |
 | A task says "can't process videos (no ffmpeg there)" | Expected for the cloud node; video runs on local or edge. |
 | `These ports are already in use` | Another copy is running. Close it, or `npm run demo:stop`, or use `--port=3001`. |
-| The app says "Backend offline" | The backend window shows the error. Check that `backend\.venv` exists and the install step finished. |
+| The app says "Backend offline" | Is the backend running on this laptop (`npm run present:backend`)? On the Vercel site, Chrome must allow local network access: click the icon left of the address bar → **Site settings** → **Local network access: Allow**, then reload. Still blocked: use `npm run present` and http://localhost:3000. If the backend window shows an error, check that `backend\.venv` exists and the install step finished. |
 
 ---
 

@@ -6,6 +6,7 @@
  *                           edge and cloud nodes are the ones set in backend/.env (EDGE_NODE_URL,
  *                           CLOUD_NODE_URL); see docs/DEPLOYMENT.md
  *   npm run present -- --port=3001   web app on another port
+ *   npm run present:backend  only the backend (use the web app on Vercel: https://edgeoffload-ai.vercel.app)
  *
  * Single-laptop demo: runs every tier on this machine.
  *
@@ -42,6 +43,9 @@ const isWin = process.platform === "win32";
 const dev = process.argv.includes("--dev");
 // --real: use the edge/cloud nodes from backend/.env instead of starting emulated ones here.
 const real = process.argv.includes("--real");
+// --backend-only: the web app is the one hosted on Vercel, so only the backend runs here.
+const backendOnly = process.argv.includes("--backend-only");
+const SITE_URL = "https://edgeoffload-ai.vercel.app";
 const webPort = Number((process.argv.find((a) => a.startsWith("--port=")) ?? "--port=3000").split("=")[1]) || 3000;
 const venvPython = path.join(backend, ".venv", isWin ? "Scripts/python.exe" : "bin/python");
 const python = existsSync(venvPython) ? venvPython : isWin ? "python" : "python3";
@@ -141,7 +145,9 @@ async function waitFor(url, label, seconds = 120) {
 
 // ---------- Preflight ----------
 const busy = [];
-const ports = real
+const ports = backendOnly
+  ? [[8000, "backend"]]
+  : real
   ? [[8000, "backend"], [webPort, "web app"]]
   : [[8000, "backend"], [8100, "edge node"], [8200, "cloud node"], [webPort, "web app"]];
 for (const [port, what] of ports) {
@@ -154,7 +160,7 @@ if (busy.length) {
   process.exit(1);
 }
 
-if (!dev) {
+if (!dev && !backendOnly) {
   console.log("Building the web app for production (about 30 s)...");
   const build = spawnSync(npx, ["next", "build"], { cwd: root, stdio: "inherit", shell: isWin });
   if (build.status !== 0) {
@@ -195,13 +201,13 @@ start("backend", python, ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1"
       },
 });
 
-start("web", npx, ["next", dev ? "dev" : "start", "--port", String(webPort)]);
+if (!backendOnly) start("web", npx, ["next", dev ? "dev" : "start", "--port", String(webPort)]);
 
 const ready = (
   await Promise.all([
     ...(real ? [] : [waitFor("http://127.0.0.1:8100/health", "Edge node"), waitFor("http://127.0.0.1:8200/health", "Cloud node")]),
     waitFor("http://127.0.0.1:8000/health", "Backend"),
-    waitFor(`http://127.0.0.1:${webPort}`, "Web app", 180),
+    ...(backendOnly ? [] : [waitFor(`http://127.0.0.1:${webPort}`, "Web app", 180)]),
   ])
 ).every(Boolean);
 
@@ -226,7 +232,7 @@ if (!ready) {
   console.log(`
 ==========================================================
  Presentation running
-   App        http://localhost:${webPort}   (open /simulation)
+   App        ${backendOnly ? `${SITE_URL}   (Chrome: allow "local network" access when asked)` : `http://localhost:${webPort}   (open /simulation)`}
    Backend    http://127.0.0.1:8000/docs
  Nodes (from backend/.env):
 ${lines.join("\n")}

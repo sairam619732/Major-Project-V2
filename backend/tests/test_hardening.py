@@ -81,6 +81,28 @@ class TestRoutingAroundNodeLimits(unittest.TestCase):
         self.assertIn("over the cloud node's", body["environment_description"])
 
 
+class TestVercelFrontendAccess(unittest.TestCase):
+    """The web app on Vercel may call this backend (incl. Chrome's private-network check); other sites may not."""
+
+    def preflight(self, origin):
+        return TestClient(app).options(
+            "/health",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Private-Network": "true",
+            },
+        )
+
+    def test_vercel_site_allowed(self):
+        res = self.preflight("https://edgeoffload-ai.vercel.app")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.headers["access-control-allow-private-network"], "true")
+
+    def test_other_sites_refused(self):
+        self.assertEqual(self.preflight("https://someone-else.vercel.app").status_code, 400)
+
+
 class TestTrainingEndpoint(unittest.TestCase):
     def test_training_is_off_by_default(self):
         with mock.patch.dict(os.environ, {"ENABLE_TRAINING_API": ""}):

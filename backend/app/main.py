@@ -23,6 +23,11 @@ cors_origins_env = os.getenv(
     "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
 )
 allowed_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+# The web app hosted on Vercel (docs/DEPLOYMENT.md). Its pages run in the presenter's browser and call
+# this backend on the same laptop. Set FRONTEND_URL to another address, or to "" to turn this off.
+frontend_url = os.getenv("FRONTEND_URL", "https://edgeoffload-ai.vercel.app").strip().rstrip("/")
+if frontend_url and frontend_url not in allowed_origins:
+    allowed_origins.append(frontend_url)
 
 
 @asynccontextmanager
@@ -54,7 +59,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    # Chrome asks before a public site (the Vercel web app) may call a server on this computer;
+    # this answers its private-network preflight for the origins allowed above.
+    allow_private_network=True,
 )
+
 
 
 @app.get(

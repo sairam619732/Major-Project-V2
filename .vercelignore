@@ -1,0 +1,23 @@
+# Files NOT uploaded when deploying the web app to Vercel (project edgeoffload-ai).
+# The backend runs on the presenter's laptop and the cloud node is its own Vercel project.
+backend/
+exports/
+.venv/
+node_modules/
+.next/
+.github/
+.claude/
+tests/
+docs/
+scripts/
+AGENTS.md
+CLAUDE.md
+# Never upload local settings or keys
+.env*
+!.env.example
+**/.env
+# Training/test splits are not used by the site (it reads data/raw and data/processed/*.json)
+data/processed/*.csv
+data/pipeline/
+*.tsbuildinfo
+.demo-pids.json
