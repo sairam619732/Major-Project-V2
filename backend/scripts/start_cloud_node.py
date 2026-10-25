@@ -19,14 +19,18 @@ TOKEN_FILE = BACKEND / ".cloud-node-token"
 
 
 def main() -> None:
-    if not TOKEN_FILE.exists():
-        TOKEN_FILE.write_text(secrets.token_urlsafe(32), encoding="utf-8")
-        print(f"Created an access key in {TOKEN_FILE}")
     os.environ.setdefault("NODE_TIER", "CLOUD")
     os.environ.setdefault("NODE_PORT", "8200")
     os.environ.setdefault("NODE_ID", "cloud-desktop")
-    os.environ["NODE_TOKEN"] = TOKEN_FILE.read_text(encoding="utf-8").strip()
-    print(f"Access key: in {TOKEN_FILE.name} (copy it into CLOUD_NODE_TOKEN on the presenter's laptop)")
+    if os.getenv("NODE_API_KEY"):
+        # The node uses NODE_API_KEY before NODE_TOKEN, so the key file is not used in this run.
+        print("Access key: from NODE_API_KEY (the .cloud-node-token file is not used in this run)")
+    else:
+        if not TOKEN_FILE.exists():
+            TOKEN_FILE.write_text(secrets.token_urlsafe(32), encoding="utf-8")
+            print(f"Created an access key in {TOKEN_FILE}")
+        os.environ["NODE_TOKEN"] = TOKEN_FILE.read_text(encoding="utf-8").strip()
+        print(f"Access key: in {TOKEN_FILE.name} (copy it into CLOUD_NODE_API_KEY on the presenter's laptop)")
 
     sys.path.insert(0, str(BACKEND))
     os.chdir(BACKEND)
