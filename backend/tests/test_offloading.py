@@ -290,6 +290,32 @@ class TestFallback(unittest.TestCase):
         self.assertGreater(body["detection_count"], 0)
 
 
+class TestNodeRefusalFallsBack(unittest.TestCase):
+    """A node refusing a task (e.g. an older worker's batch limit) sends it to the next tier, not to an error."""
+
+    def test_refused_by_edge_then_local(self):
+        live = dict(online=True, rtt_ms=10.0, bandwidth_gbps=0.5, token="k")
+        nodes = {"edge": NodeTelemetry("EDGE", url="http://e.test", **live), "cloud": NodeTelemetry("CLOUD")}
+        real = sim.inference_service.predict
+
+        def edge_choice(**kw):
+            res = real(**kw)
+            res.update(decision="EDGE", action_index=1, q_values={"local": -1.0, "edge": -0.2, "cloud": -2.0})
+            return res
+
+        async def refuse(key, *args, **kwargs):
+            raise RemoteTaskError("12 photos were sent; the limit is 10 at a time.", "rejected")
+
+        with mock.patch.dict(sim.node_monitor.nodes, nodes), \
+                mock.patch.object(sim.inference_service, "predict", side_effect=edge_choice), \
+                mock.patch.object(sim.node_monitor, "execute", side_effect=refuse):
+            res = execute(TestClient(app))
+        self.assertEqual(res.status_code, 200, res.text)
+        body = res.json()
+        self.assertEqual(body["executed_on"], "LOCAL")
+        self.assertIn("limit is 10", " ".join(body["routing_notes"]))
+
+
 class TestDqnOrderIsRespected(unittest.TestCase):
     """With nodes live, a DQN choice of LOCAL runs locally: remote tiers are not tried first."""
 

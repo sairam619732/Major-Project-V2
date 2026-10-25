@@ -239,7 +239,7 @@ async def execute_simulation_task(
             detail="Uploaded file payload is empty.",
         )
 
-    # One photo, up to 10 photos, or a video of up to 10 s (see workload_limits.py).
+    # One photo, a batch of photos (up to 100 MB in total), or a video of up to 10 s (see workload_limits.py).
     # Runs off the event loop: reading a video's length starts ffprobe.
     try:
         await run_in_threadpool(check_workload, w_type, [(name, data) for name, data, _ in files_data])
@@ -405,9 +405,9 @@ async def execute_simulation_task(
             decision = tier
             break
         except RemoteTaskError as exc:
-            if exc.kind == "rejected":
-                # The task itself is invalid there (e.g. a format the node can't read): report it.
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{tier} node: {exc}")
+            # Includes a node refusing the task (e.g. a worker on older code with a smaller batch limit):
+            # try the next tier. If the task is invalid everywhere, the local check below rejects it
+            # with a clear 400 instead of reporting success.
             routing_notes.append(f"{tier} was tried, but {exc}.")
     action_idx = {"LOCAL": 0, "EDGE": 1, "CLOUD": 2}[decision]
     if decision != dqn_decision or routing_notes:

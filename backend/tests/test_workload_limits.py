@@ -1,4 +1,4 @@
-"""Tests for the task size limits (one photo, up to 10 photos, a video of up to 10 s).
+"""Tests for the task size limits (one photo, a batch of photos up to 100 MB in total, a video of up to 10 s).
 
 Run from backend/:  .venv\\Scripts\\python.exe -m tests.test_workload_limits
 Video tests need ffmpeg/ffprobe on PATH; they are skipped without them.
@@ -14,7 +14,7 @@ from unittest import mock
 from app.services import workload_limits
 from app.services.cv_executor import cv_executor
 from app.services.workload_limits import (
-    MAX_BATCH_IMAGES,
+    MAX_BATCH_TOTAL_MB,
     MAX_IMAGE_MB,
     MAX_VIDEO_SECONDS,
     WorkloadError,
@@ -47,11 +47,14 @@ class TestPhotoLimits(unittest.TestCase):
             check_workload("IMAGE", [("a.jpg", PHOTO), ("b.jpg", PHOTO)])
 
     def test_batch_up_to_the_limit_is_accepted(self):
-        check_workload("IMAGE_BATCH", [(f"{i}.jpg", PHOTO) for i in range(MAX_BATCH_IMAGES)])
+        # No count limit any more: 25 photos (more than the old limit of 10) are fine.
+        check_workload("IMAGE_BATCH", [(f"{i}.jpg", PHOTO) for i in range(25)])
 
     def test_batch_over_the_limit_is_rejected(self):
-        with self.assertRaisesRegex(WorkloadError, f"limit is {MAX_BATCH_IMAGES}"):
-            check_workload("IMAGE_BATCH", [(f"{i}.jpg", PHOTO) for i in range(MAX_BATCH_IMAGES + 1)])
+        # The total size cap still applies (protects memory).
+        n = int(MAX_BATCH_TOTAL_MB * 1024 * 1024 / len(PHOTO)) + 1
+        with self.assertRaisesRegex(WorkloadError, f"limit is {MAX_BATCH_TOTAL_MB} MB"):
+            check_workload("IMAGE_BATCH", [(f"{i}.jpg", PHOTO) for i in range(n)])
 
     def test_oversized_photo_is_rejected(self):
         big = b"\0" * (MAX_IMAGE_MB * 1024 * 1024 + 1)

@@ -2,12 +2,12 @@
 
 import { useRef } from "react";
 import { useSimulationState } from "@/lib/simulation/simulationState";
-import { MAX_BATCH_IMAGES, MAX_IMAGE_MB, MAX_VIDEO_MB, MAX_VIDEO_SECONDS } from "@/lib/simulation/workloadLimits";
+import { MAX_BATCH_TOTAL_MB, MAX_IMAGE_MB, MAX_VIDEO_MB, MAX_VIDEO_SECONDS } from "@/lib/simulation/workloadLimits";
 
 // What each task type accepts (enforced again by the backend and every node).
 const LIMIT_HINTS = {
   IMAGE: `One photo · JPG, PNG or WebP · up to ${MAX_IMAGE_MB} MB`,
-  IMAGE_BATCH: `Up to ${MAX_BATCH_IMAGES} photos at a time · up to ${MAX_IMAGE_MB} MB each`,
+  IMAGE_BATCH: `Any number of photos · up to ${MAX_IMAGE_MB} MB each, ${MAX_BATCH_TOTAL_MB} MB in total`,
   VIDEO: `One video · up to ${MAX_VIDEO_SECONDS} s and ${MAX_VIDEO_MB} MB · analysed at 1 frame per second`,
 } as const;
 
@@ -173,7 +173,7 @@ export function SimulationTaskPayload() {
           <input ref={batchFileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleBatchFilesChange} />
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-5 rounded-lg bg-cyan-950/20 border border-dashed border-cyan-500/40">
             <div className="flex flex-wrap items-center gap-3">
-              <button type="button" onClick={() => batchFileInputRef.current?.click()} disabled={batchImages.length >= MAX_BATCH_IMAGES} className="disabled:opacity-40 disabled:cursor-not-allowed py-2.5 px-5 rounded-md border border-cyan-400/60 hover:border-cyan-300 bg-cyan-950/40 hover:bg-cyan-950/70 text-cyan-100 font-mono text-[13px] tracking-widest uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+              <button type="button" onClick={() => batchFileInputRef.current?.click()} className="disabled:opacity-40 disabled:cursor-not-allowed py-2.5 px-5 rounded-md border border-cyan-400/60 hover:border-cyan-300 bg-cyan-950/40 hover:bg-cyan-950/70 text-cyan-100 font-mono text-[13px] tracking-widest uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.2)]">
                 <span className="text-cyan-400 font-bold text-base">⊕</span>
                 <span>ADD IMAGES</span>
               </button>
@@ -183,7 +183,7 @@ export function SimulationTaskPayload() {
             </div>
             {batchImages.length > 0 && (
               <div className="flex flex-col items-end gap-1">
-                <span className="font-mono text-cyan-200 font-bold text-[14px]">{batchImages.length} / {MAX_BATCH_IMAGES} IMAGES</span>
+                <span className="font-mono text-cyan-200 font-bold text-[14px]">{batchImages.length} IMAGES</span>
                 <span className="font-mono text-slate-400 text-[11px]">{batchImages.reduce((sum, img) => sum + img.sizeMb, 0).toFixed(2)} MB TOTAL</span>
               </div>
             )}

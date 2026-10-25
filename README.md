@@ -262,7 +262,7 @@ Interactive Swagger API documentation is available at `http://127.0.0.1:8000/doc
 ### Task limits
 Sized for ordinary laptops and free CPU servers, and checked in the browser, the backend and every node:
 - **Image:** one photo (JPG, PNG or WebP), up to 10 MB.
-- **Image batch:** up to 10 photos at a time, each up to 10 MB.
+- **Image batch:** any number of photos, each up to 10 MB, up to 100 MB per batch in total (the total cap protects memory). Batches too large for a node (e.g. over 4 MB for the Vercel cloud) are run on another tier.
 - **Video:** one video, up to 10 seconds and 50 MB, analysed at 1 frame per second (so at most 10 frames). Needs **ffmpeg** on the machine that runs it (Windows: `winget install Gyan.FFmpeg`); without it the task is refused with a clear message.
 
 The numbers live in `backend/app/services/workload_limits.py` and `src/lib/simulation/workloadLimits.ts`.

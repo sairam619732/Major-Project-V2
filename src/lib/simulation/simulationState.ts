@@ -29,7 +29,7 @@ import {
   SCENARIO_PRESETS,
 } from "./simulationPresets";
 import { evaluateOffloadingDecision } from "@/lib/offloading/decisionEngine";
-import { MAX_BATCH_IMAGES, MAX_IMAGE_MB, MAX_VIDEO_MB, MAX_VIDEO_SECONDS, fileMb } from "./workloadLimits";
+import { MAX_BATCH_TOTAL_MB, MAX_IMAGE_MB, MAX_VIDEO_MB, MAX_VIDEO_SECONDS, fileMb } from "./workloadLimits";
 import {
   submitSimulationToBackend,
   executeTaskOffloading,
@@ -715,10 +715,20 @@ export const simulationStore = {
       problems.push(`${file.name} is over ${MAX_IMAGE_MB} MB`);
       return false;
     });
-    const room = Math.max(0, MAX_BATCH_IMAGES - currentBatchImages.length);
-    const fileList = small.slice(0, room);
-    if (small.length > room) {
-      problems.push(`only ${MAX_BATCH_IMAGES} photos can be processed at a time, so ${small.length - room} were not added`);
+    // Any number of photos, up to MAX_BATCH_TOTAL_MB in total.
+    let totalMb = currentBatchImages.reduce((sum, img) => sum + img.sizeBytes / (1024 * 1024), 0);
+    const fileList: File[] = [];
+    let skipped = 0;
+    for (const file of small) {
+      if (totalMb + fileMb(file) > MAX_BATCH_TOTAL_MB) {
+        skipped += 1;
+        continue;
+      }
+      totalMb += fileMb(file);
+      fileList.push(file);
+    }
+    if (skipped) {
+      problems.push(`a batch can be up to ${MAX_BATCH_TOTAL_MB} MB in total, so ${skipped} photo(s) were not added`);
     }
     currentUploadError = problems.length ? `Not added: ${problems.join("; ")}.` : null;
     if (fileList.length === 0) {

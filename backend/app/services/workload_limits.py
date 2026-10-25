@@ -2,7 +2,8 @@
 
 Accepted workloads:
   IMAGE        one photo, up to MAX_IMAGE_MB
-  IMAGE_BATCH  up to MAX_BATCH_IMAGES photos, each up to MAX_IMAGE_MB
+  IMAGE_BATCH  any number of photos, each up to MAX_IMAGE_MB, MAX_BATCH_TOTAL_MB in total (the total
+               cap protects the machine's memory: the whole upload is held while it is processed)
   VIDEO        one video, up to MAX_VIDEO_SECONDS long and MAX_VIDEO_MB in size; analysed at 1 frame
                per second (so at most MAX_VIDEO_SECONDS frames). Needs ffmpeg/ffprobe on the machine.
 
@@ -21,7 +22,7 @@ from typing import List, Tuple
 from PIL import Image
 
 MAX_IMAGE_MB = 10
-MAX_BATCH_IMAGES = 10
+MAX_BATCH_TOTAL_MB = 100
 MAX_VIDEO_SECONDS = 10
 MAX_VIDEO_MB = 50
 
@@ -101,8 +102,11 @@ def check_workload(workload_type: str, files_data: List[Tuple[str, bytes]]) -> N
         return
 
     if w_type in BATCH_TYPES:
-        if len(files_data) > MAX_BATCH_IMAGES:
-            raise WorkloadError(f"{len(files_data)} photos were sent; the limit is {MAX_BATCH_IMAGES} at a time.")
+        total_mb = _mb(sum(len(content) for _, content in files_data))
+        if total_mb > MAX_BATCH_TOTAL_MB:
+            raise WorkloadError(
+                f"The batch is {total_mb:.1f} MB in total; the limit is {MAX_BATCH_TOTAL_MB} MB. Split it into smaller batches."
+            )
     elif len(files_data) != 1:
         raise WorkloadError("Upload one photo, or use multiple photos mode.")
 

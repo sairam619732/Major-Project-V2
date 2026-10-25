@@ -329,7 +329,7 @@ async def execute(
             started = time.perf_counter()
             _running += 1
             try:
-                # Same limits as the backend: one photo, up to 10 photos, or a video of up to 10 s.
+                # Same limits as the backend: one photo, a batch up to 100 MB, or a video of up to 10 s.
                 await run_in_threadpool(check_workload, workload_type, files_data)
                 # Detection is CPU/GPU heavy: run it off the event loop so /status stays responsive.
                 result = await run_in_threadpool(
