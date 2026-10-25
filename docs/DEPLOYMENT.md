@@ -393,13 +393,13 @@ Open **https://edgeoffload-ai.vercel.app/devices** in Chrome. The first time, Ch
 - **Same detector everywhere:** SSDLite320 MobileNetV3 with COCO weights. The cloud runs it on ONNX Runtime instead of PyTorch (Vercel's size limit), with identical results.
 - **The cloud is your desktop:** a remote, much more powerful machine (RTX 5070 GPU) reached over the internet, which is the role a cloud datacenter plays in this model. It isn't a commercial datacenter; the Vercel deployment (Part 3) shows the same node running on real cloud infrastructure.
 - **Vercel is serverless:** the cloud's CPU load and queue are those of the function instance that answered, and Vercel may run several instances. Treat them as approximate.
-- **The DQN currently sends almost every task to LOCAL**, even when the cost model says the edge would be cheaper. That is the trained policy's behaviour, not a deployment problem. The routing to edge and cloud is in place and tested.
+- **The DQN (v2, retrained on a cost model calibrated to measured detection times):** it keeps tasks local when the laptop is idle and offloads when the laptop is busy or the batch is large (79% agreement with the cost model's best choice on held-out tasks, versus 47% for the first model). In a live run it chose CLOUD for a single photo and the task ran on the RTX 5070. Details and how to reproduce: README section 6.
 - **Offline or unsuitable nodes:** if the DQN picks a tier that is offline, or can't take the task (video without ffmpeg, upload over the size limit), the task runs on the best remaining tier and the result says why.
 
 ## Known limitations
 
-- **The trained DQN rarely offloads.** With the nodes live it still chooses LOCAL for the sample tasks (its Q-values rank LOCAL first). Remote execution and fallback are verified by tests that force an EDGE/CLOUD choice against a real worker, not by the DQN choosing them on its own. Retraining with input ranges that match the real measurements would be needed.
-- **DQN inputs outside its training ranges.** Real bandwidths (e.g. 0.05–0.3 Gbps) are far below the simulator's training range (1–40 "Gbps"), and the measured round trip is used where the cost model expects one-way latency.
+- **Local and edge detection times are proxies.** Cost model v2 uses the real desktop GPU timing for the cloud, but the laptop and edge timings were measured on the desktop's CPU (faster than the laptops), which biases the DQN towards LOCAL. Run `scripts\calibrate_detection.py` on each laptop and retrain (README section 6).
+- **The DQN still misses some cases**, e.g. a single photo on a very busy laptop (it says LOCAL; the cost model says CLOUD), and it remains below the oracle (an upper bound that knows the exact costs).
 - **Keys in plain text.** `backend\node_settings.json` and `backend\.env` are unencrypted files on the presenter's computer (ignored by git).
 - **No hard execution timeout on a worker.** A task that hangs inside the detector can't be killed; the backend stops waiting after 90 s + 30 s of status checks and runs the task on the next tier.
 - **Vercel cloud worker:** CPU only (ONNX Runtime), 4.5 MB per request, no video, results kept per instance (a status lookup can reach a different instance), cold starts of a few seconds; Hobby has monthly limits (1 M requests, 4 h CPU, 360 GB-h memory).

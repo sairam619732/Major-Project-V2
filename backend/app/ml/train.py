@@ -19,6 +19,7 @@ def run_training_loop(
     weights: Optional[RewardWeights] = None,
     steps_per_episode: int = 25,
     save_history_dir: Optional[str] = None,
+    cost_model: str = "v1",
 ) -> Dict[str, Any]:
     """Executes a fully reproducible DQN training loop across simulated task episodes.
 
@@ -27,6 +28,8 @@ def run_training_loop(
         weights: Multi-objective reward component weights.
         steps_per_episode: Number of sequential task transitions per episode.
         save_history_dir: Optional directory to save training history JSON and CSV.
+        cost_model: "v1" (original synthetic model) or "v2" (calibrated to measurements). Saved in
+            the checkpoint, so inference uses the same model and input scaling.
 
     Returns:
         Structured training metrics including episode rewards, losses, action distributions,
@@ -35,7 +38,7 @@ def run_training_loop(
     config = config or DQNConfig()
     weights = weights or RewardWeights()
 
-    env = OffloadingEnvironment(weights=weights, seed=config.seed)
+    env = OffloadingEnvironment(weights=weights, seed=config.seed, version=cost_model)
     agent = DQNAgent(config=config)
 
     start_time = time.time()
@@ -99,7 +102,7 @@ def run_training_loop(
             rolling_avg = float(np.mean(window))
             if rolling_avg > best_avg_reward or saved_checkpoint_path == "":
                 best_avg_reward = rolling_avg
-                saved_checkpoint_path = agent.save_checkpoint()
+                saved_checkpoint_path = agent.save_checkpoint(metadata={"cost_model_version": cost_model})
 
     elapsed_sec = round(time.time() - start_time, 2)
 
@@ -130,6 +133,7 @@ def run_training_loop(
         "best_rolling_reward": round(best_avg_reward, 4),
         "checkpoint_saved": saved_checkpoint_path,
         "model_path": config.model_path,
+        "cost_model_version": cost_model,
         "history": training_history,
     }
 
@@ -141,6 +145,8 @@ def main():
     parser.add_argument("--lr", type=float, default=0.0005, help="Learning rate")
     parser.add_argument("--output", type=str, default="", help="Custom checkpoint output path")
     parser.add_argument("--history-dir", type=str, default="benchmarks/results", help="Directory to save history logs")
+    parser.add_argument("--cost-model", choices=("v1", "v2"), default="v1", help="v2 = calibrated to measured detection times")
+    parser.add_argument("--gamma", type=float, default=None, help="Discount factor (default: DQN_GAMMA or 0.95; v2 model uses 0.3)")
     args = parser.parse_args()
 
     cfg = DQNConfig(
@@ -148,11 +154,13 @@ def main():
         seed=args.seed,
         learning_rate=args.lr,
     )
+    if args.gamma is not None:
+        cfg.gamma = args.gamma
     if args.output:
         cfg.model_path = args.output
 
     print(f"=== Starting DQN Training (Episodes: {cfg.episodes}, Seed: {cfg.seed}) ===")
-    results = run_training_loop(config=cfg, save_history_dir=args.history_dir)
+    results = run_training_loop(config=cfg, save_history_dir=args.history_dir, cost_model=args.cost_model)
     print(f"Training Complete in {results['elapsed_seconds']}s")
     print(f"Initial Avg Reward: {results['initial_avg_reward']:.4f} -> Final: {results['final_avg_reward']:.4f}")
     print(f"Model saved to: {results['checkpoint_saved']}")

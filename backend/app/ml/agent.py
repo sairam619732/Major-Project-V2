@@ -134,8 +134,8 @@ class DQNAgent:
 
         return float(loss.item())
 
-    def save_checkpoint(self, path: Optional[str] = None) -> str:
-        """Saves model checkpoint weights and configuration state."""
+    def save_checkpoint(self, path: Optional[str] = None, metadata: Optional[dict] = None) -> str:
+        """Saves model checkpoint weights and configuration state (plus optional metadata, e.g. its cost model)."""
         save_path = path or self.config.model_path
         p = Path(save_path).resolve()
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -147,6 +147,7 @@ class DQNAgent:
             "config": self.config.model_dump(),
             "epsilon": self.epsilon,
             "total_steps": self.total_steps,
+            **(metadata or {}),
         }
         torch.save(checkpoint, str(p))
         return str(p)
@@ -168,6 +169,8 @@ class DQNAgent:
                 self.epsilon = checkpoint["epsilon"]
             if "total_steps" in checkpoint:
                 self.total_steps = checkpoint["total_steps"]
+            # Older checkpoints have no cost_model_version: they were trained on v1.
+            self.checkpoint_meta = {"cost_model_version": checkpoint.get("cost_model_version", "v1")}
             self.target_net.eval()
             return True
         except Exception:

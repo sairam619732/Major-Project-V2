@@ -1,0 +1,180 @@
+{
+  "evaluated_on": "cost model v2 (calibrated)",
+  "seeds": [
+    101,
+    202,
+    303,
+    404,
+    505
+  ],
+  "tasks": 2000,
+  "old_checkpoint": {
+    "path": "app/ml/checkpoints/backup_v1_2026-10-25/dqn_offloading_best.pt",
+    "cost_model": "v1"
+  },
+  "new_checkpoint": {
+    "path": "app/ml/checkpoints/dqn_offloading_v2.pt",
+    "cost_model": "v2"
+  },
+  "policies": {
+    "old_dqn": {
+      "mean_reward": -0.7141,
+      "ci95": 0.0088,
+      "deadline_met_pct": 15.8,
+      "median_latency_ms": 2783.2,
+      "actions_pct": {
+        "LOCAL": 52.0,
+        "EDGE": 32.2,
+        "CLOUD": 15.8
+      },
+      "oracle_agreement_pct": 47.4
+    },
+    "new_dqn": {
+      "mean_reward": -0.6659,
+      "ci95": 0.0087,
+      "deadline_met_pct": 21.6,
+      "median_latency_ms": 2178.4,
+      "actions_pct": {
+        "LOCAL": 73.5,
+        "EDGE": 12.1,
+        "CLOUD": 14.4
+      },
+      "oracle_agreement_pct": 79.4
+    },
+    "oracle": {
+      "mean_reward": -0.659,
+      "ci95": 0.0087,
+      "deadline_met_pct": 22.1,
+      "median_latency_ms": 2135.5,
+      "actions_pct": {
+        "LOCAL": 71.7,
+        "EDGE": 11.8,
+        "CLOUD": 16.4
+      },
+      "oracle_agreement_pct": null
+    },
+    "local_only": {
+      "mean_reward": -0.672,
+      "ci95": 0.0087,
+      "deadline_met_pct": 21.1,
+      "median_latency_ms": 2239.6,
+      "actions_pct": {
+        "LOCAL": 100.0,
+        "EDGE": 0.0,
+        "CLOUD": 0.0
+      },
+      "oracle_agreement_pct": null
+    },
+    "edge_only": {
+      "mean_reward": -0.766,
+      "ci95": 0.0083,
+      "deadline_met_pct": 12.4,
+      "median_latency_ms": 4208.6,
+      "actions_pct": {
+        "LOCAL": 0.0,
+        "EDGE": 100.0,
+        "CLOUD": 0.0
+      },
+      "oracle_agreement_pct": null
+    },
+    "cloud_only": {
+      "mean_reward": -0.7604,
+      "ci95": 0.0078,
+      "deadline_met_pct": 12.7,
+      "median_latency_ms": 3294.3,
+      "actions_pct": {
+        "LOCAL": 0.0,
+        "EDGE": 0.0,
+        "CLOUD": 100.0
+      },
+      "oracle_agreement_pct": null
+    }
+  },
+  "paired_tests": {
+    "new_minus_old": {
+      "mean_diff": 0.0481,
+      "ci95": 0.0041,
+      "significant": true
+    },
+    "new_minus_local_only": {
+      "mean_diff": 0.0061,
+      "ci95": 0.0015,
+      "significant": true
+    },
+    "oracle_minus_new": {
+      "mean_diff": 0.0069,
+      "ci95": 0.0009,
+      "significant": true
+    }
+  },
+  "scenarios": [
+    {
+      "scenario": "1 photo, idle laptop",
+      "oracle": "LOCAL",
+      "old_dqn": "LOCAL",
+      "new_dqn": "LOCAL",
+      "latency_ms_local_edge_cloud": [
+        320.67,
+        400.88,
+        300.28
+      ]
+    },
+    {
+      "scenario": "1 photo, busy laptop (10% CPU free)",
+      "oracle": "CLOUD",
+      "old_dqn": "LOCAL",
+      "new_dqn": "LOCAL",
+      "latency_ms_local_edge_cloud": [
+        640.14,
+        400.88,
+        300.28
+      ]
+    },
+    {
+      "scenario": "10-photo batch, idle laptop",
+      "oracle": "LOCAL",
+      "old_dqn": "LOCAL",
+      "new_dqn": "LOCAL",
+      "latency_ms_local_edge_cloud": [
+        2463.72,
+        3158.3,
+        2230.16
+      ]
+    },
+    {
+      "scenario": "10-photo batch, busy laptop",
+      "oracle": "CLOUD",
+      "old_dqn": "LOCAL",
+      "new_dqn": "CLOUD",
+      "latency_ms_local_edge_cloud": [
+        4926.25,
+        3158.3,
+        2230.16
+      ]
+    },
+    {
+      "scenario": "50-photo batch, idle laptop",
+      "oracle": "LOCAL",
+      "old_dqn": "LOCAL",
+      "new_dqn": "LOCAL",
+      "latency_ms_local_edge_cloud": [
+        11988.41,
+        15413.5,
+        10807.38
+      ]
+    },
+    {
+      "scenario": "50-photo batch, busy laptop",
+      "oracle": "CLOUD",
+      "old_dqn": "CLOUD",
+      "new_dqn": "CLOUD",
+      "latency_ms_local_edge_cloud": [
+        23975.61,
+        15413.5,
+        10807.38
+      ]
+    }
+  ],
+  "decision_rule": "switch only if new mean reward is higher with non-overlapping 95% CIs AND oracle agreement is higher",
+  "new_is_better": true
+}

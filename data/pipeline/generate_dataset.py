@@ -73,7 +73,8 @@ def sample_row(rng: random.Random, sample_id: int, weights: RewardWeights) -> li
         bandwidth=round(rng.uniform(5.0, 40.0), 1),
     )
 
-    metrics = [compute_action_metrics(task, local, edge, cloud, a, weights) for a in (0, 1, 2)]
+    # Pinned to the original cost model so the dataset stays reproducible (teammates' XGBoost work).
+    metrics = [compute_action_metrics(task, local, edge, cloud, a, weights, version="v1") for a in (0, 1, 2)]
     best = max(metrics, key=lambda m: m["reward"])
 
     return [

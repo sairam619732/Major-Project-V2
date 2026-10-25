@@ -52,7 +52,7 @@ run("Frontend unit: simulation presets", npx, ["tsx", "src/lib/simulation/__test
 if (!quick) run("Next.js production build", npx, ["next", "build"]);
 
 // ---------- Backend ----------
-for (const suite of ["test_dqn", "test_benchmark", "test_phase17", "test_phase18", "test_nodes", "test_workload_limits", "test_hardening", "test_offloading"]) {
+for (const suite of ["test_dqn", "test_benchmark", "test_phase17", "test_phase18", "test_nodes", "test_workload_limits", "test_hardening", "test_offloading", "test_calibrated_model"]) {
   run(`Backend: ${suite}`, python, ["-m", `tests.${suite}`], backend);
 }
 

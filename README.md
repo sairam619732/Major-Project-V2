@@ -139,6 +139,82 @@ All policies were evaluated on identical streaming task sequences:
 
 ## 6. Research Results
 
+### Calibrated cost model and retrained DQN (v2, live model since 2026-10-25)
+
+The first DQN (v1) was trained on a synthetic cost model that does not match the deployed system:
+it estimated a photo's local detection at 2-3 ms (real: 120-300 ms), added network transfer in
+seconds as if it were milliseconds (so transfer was effectively ignored), counted the measured
+round trip twice, and trained on 5-60 MB tasks and 1-40 Gbps links (real: 0.5 MB photos, 0.01-0.3
+Gbps over Radmin VPN). In the real system it therefore almost always chose LOCAL, even when its own
+cost model said EDGE.
+
+**Cost model v2** (`backend/app/ml/environment.py`, `backend/app/ml/calibration.py`):
+- **Measured:** detection time per tier, fitted as `overhead_ms + ms_per_mb × upload_MB` to timed
+  runs of the real detector (`backend/scripts/calibrate_detection.py`; 45 tasks per tier, R² ≈ 0.96):
+
+  | Tier | Measured on | Overhead | Per MB | One photo (median) |
+  | --- | --- | --- | --- | --- |
+  | Cloud | Desktop, RTX 5070 (the real cloud) | 54 ms | 289 ms | 186 ms |
+  | Local | **Proxy:** desktop i7-14700KF, 4 threads (the laptop is not yet measured) | 58 ms | 362 ms | 240 ms |
+  | Edge | **Proxy:** desktop i7-14700KF, 2 threads (the edge-like limit) | 71 ms | 468 ms | 302 ms |
+
+- **Fed in at run time:** measured round trip, bandwidth, CPU load and queues of each node.
+- **Assumed** (documented in `calibration.ASSUMPTIONS`): how load and queues slow a tier, and the
+  energy and price constants (same as v1). Latency, energy and cost use log scales over the full
+  range of real tasks, so long tasks still differ.
+- **Training ranges of the deployed system:** 0.1-100 MB tasks, 20-5000 ms deadlines, 2-1000 Mbps
+  links, 2-300 ms round trips, edge queue ≤ 3.
+
+v1 is kept unchanged (the dataset generator in `data/pipeline` is pinned to it, so the teammates'
+dataset stays reproducible). Each checkpoint records which cost model it was trained on, and the
+app uses that model and input scaling. The v1 checkpoint is kept in
+`backend/app/ml/checkpoints/backup_v1_2026-10-25/`.
+
+**Retrained DQN** (same 17 inputs, same network and algorithm; discount factor 0.3 instead of 0.95,
+because a choice barely affects the next task; 1,500 episodes; seed 42; reproducible). Compared on
+2,000 tasks with seeds not used in training, every policy scored with cost model v2
+(`backend/benchmarks/results_v2/model_comparison.md`):
+
+| Policy | Mean reward (± 95% CI) | Agrees with oracle | Deadline met | LOCAL / EDGE / CLOUD |
+| --- | --- | --- | --- | --- |
+| **New DQN (v2)** | **−0.666 ± 0.009** | **79.4%** | 21.6% | 73.5% / 12.1% / 14.4% |
+| Old DQN (v1) | −0.714 ± 0.009 | 47.4% | 15.8% | 52.0% / 32.2% / 15.8% |
+| Oracle (knows exact costs; upper bound) | −0.659 ± 0.009 | – | 22.1% | 71.7% / 11.8% / 16.4% |
+| Local only | −0.672 ± 0.009 | – | 21.1% | 100% / 0% / 0% |
+| Edge only | −0.766 ± 0.008 | – | 12.4% | 0% / 100% / 0% |
+| Cloud only | −0.760 ± 0.008 | – | 12.7% | 0% / 0% / 100% |
+
+Paired differences on the same tasks: new − old = +0.048 ± 0.004, new − local only = +0.006 ± 0.002,
+oracle − new = +0.007 ± 0.001 (all significant). The new model was switched in because it is
+significantly better than the old one and agrees with the oracle more often.
+
+Scenario check (photos over Radmin, 1 s deadline): the new DQN matches the oracle in 5 of 6 cases
+(idle laptop → LOCAL; busy laptop with a 10- or 50-photo batch → CLOUD). It misses "1 photo, busy
+laptop" (says LOCAL; oracle CLOUD). In a live run on the desktop it chose CLOUD for a single photo,
+and the task ran on the RTX 5070.
+
+Limits: the local and edge timings are proxies measured on the desktop and are faster than the real
+laptops, which biases decisions towards LOCAL; re-measure on each machine (below) and retrain. Most
+tasks miss short deadlines on every tier (22% met even for the oracle), because real detection takes
+longer than many deadlines in the sampled range. The table in the following section is the earlier
+**v1** evaluation on the synthetic cost model.
+
+Reproduce (from `backend`):
+```powershell
+# 1. Measure each tier on its own machine (copy app\ml\calibration.json back to the training PC)
+.\.venv-gpu\Scripts\python.exe scripts\calibrate_detection.py --tier cloud --device cuda   # desktop
+.\.venv\Scripts\python.exe scripts\calibrate_detection.py --tier local                     # presenter laptop
+.\.venv\Scripts\python.exe scripts\calibrate_detection.py --tier edge --threads 2          # teammate laptop
+# 2. Train on cost model v2 (about 2.5 min on a desktop CPU)
+.\.venv\Scripts\python.exe -m app.ml.train --cost-model v2 --gamma 0.3 --episodes 1500 --seed 42 --output app/ml/checkpoints/dqn_offloading_v2.pt --history-dir benchmarks/results_v2
+# 3. Compare with the v1 model on held-out seeds (writes benchmarks/results_v2/model_comparison.md)
+.\.venv\Scripts\python.exe scripts\compare_dqn_models.py --old app/ml/checkpoints/backup_v1_2026-10-25/dqn_offloading_best.pt --new app/ml/checkpoints/dqn_offloading_v2.pt
+# 4. Only if it says "New model better: True": make it the live model, then restart the backend
+copy app\ml\checkpoints\dqn_offloading_v2.pt app\ml\checkpoints\dqn_offloading_best.pt
+```
+
+**v1 evaluation (synthetic cost model, Phase 18):**
+
 All metrics reflect actual empirical data from Phase 18 evaluated across **5 independent seeds** (`[42, 101, 2024, 777, 8888]`) and **500 workloads** (**3,000 policy executions**):
 
 ### Comprehensive Policy Comparison

@@ -408,7 +408,7 @@ async def execute_simulation_task(
             # Includes a node refusing the task (e.g. a worker on older code with a smaller batch limit):
             # try the next tier. If the task is invalid everywhere, the local check below rejects it
             # with a clear 400 instead of reporting success.
-            routing_notes.append(f"{tier} was tried, but {exc}.")
+            routing_notes.append(f"{tier} was tried, but {str(exc).rstrip('.')}.")
     action_idx = {"LOCAL": 0, "EDGE": 1, "CLOUD": 2}[decision]
     if decision != dqn_decision or routing_notes:
         routing_notes.append(f"The task ran on {decision}.")

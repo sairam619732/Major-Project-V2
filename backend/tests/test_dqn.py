@@ -42,12 +42,16 @@ def test_state_to_vector_conversion():
     assert vec.shape == (17,), f"Expected shape (17,), got {vec.shape}"
     assert np.all(vec >= 0.0) and np.all(vec <= 1.0), "All state features must be in [0.0, 1.0]"
 
-    # Test edge values
+    # Test edge values, for both input scalings (v1 = original, v2 = calibrated model)
     task_high = SimulationTaskInput(data_size_mb=200.0, cpu_demand_percent=100.0, memory_demand_percent=100.0, deadline_ms=800.0, priority=5)
-    vec_high = state_to_vector(task_high, local, edge, cloud)
+    vec_high = state_to_vector(task_high, local, edge, cloud, version="v1")
     assert vec_high[0] == 1.0, "Clamping failed on max data_size_mb"
     assert vec_high[3] == 1.0, "Clamping failed on max deadline"
     assert vec_high[4] == 1.0, "Priority 5 must normalize to 1.0"
+    task_v2_high = SimulationTaskInput(data_size_mb=200.0, cpu_demand_percent=100.0, memory_demand_percent=100.0, deadline_ms=8000.0, priority=5)
+    vec_v2 = state_to_vector(task_v2_high, local, edge, cloud, version="v2")
+    assert vec_v2.shape == (17,) and np.all(vec_v2 >= 0.0) and np.all(vec_v2 <= 1.0), "v2 features must be in [0, 1]"
+    assert vec_v2[0] == 1.0 and vec_v2[3] == 1.0, "v2 must clamp size above 100 MB and deadline above 5000 ms"
 
     assert normalize_priority(TaskPriority.LOW) == 0.0
     assert normalize_priority(TaskPriority.CRITICAL) == 1.0

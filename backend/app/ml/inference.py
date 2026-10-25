@@ -8,7 +8,7 @@ from app.models.simulation import SimulationTaskInput
 from app.models.system import LocalNodeState, EdgeNodeState, CloudNodeState
 from app.ml.config import DQNConfig, RewardWeights
 from app.ml.agent import DQNAgent
-from app.ml.environment import state_to_vector, compute_action_metrics, ACTION_NAMES
+from app.ml.environment import state_to_vector, compute_action_metrics, ACTION_NAMES, set_cost_model
 from app.ml.baselines import RuleBasedGreedyPolicy
 
 
@@ -34,6 +34,9 @@ class DQNInferenceService:
         success = self.agent.load_checkpoint()
         if not success:
             return False
+        # Use the cost model and input scaling this checkpoint was trained with (v1 for older ones).
+        self.cost_model_version = getattr(self.agent, "checkpoint_meta", {}).get("cost_model_version", "v1")
+        set_cost_model(self.cost_model_version)
 
         # Put networks explicitly into inference evaluation mode
         self.agent.online_net.eval()

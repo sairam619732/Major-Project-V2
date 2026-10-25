@@ -1,0 +1,63 @@
+{
+  "cloud": {
+    "overhead_ms": 54.49,
+    "ms_per_mb": 289.01,
+    "measured": true,
+    "r2": 0.964,
+    "samples": 45,
+    "single_photo_median_ms": 186.4,
+    "upload_mb_range": [
+      0.17,
+      7.38
+    ],
+    "detector": "SSDLite320_MobileNet_V3_Large (COCO 91 Classes) \u00b7 PyTorch \u00b7 GPU (NVIDIA GeForce RTX 5070)",
+    "device": "GPU (NVIDIA GeForce RTX 5070)",
+    "cpu_threads_limit": null,
+    "host": "SAIRAM",
+    "cpu": "Intel(R) Core(TM) i7-14700KF",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "measured_at": "2026-10-25T12:45:39+00:00",
+    "proxy_for": null
+  },
+  "_note": "Written by backend/scripts/calibrate_detection.py; detection_ms = overhead_ms + ms_per_mb * upload_MB.",
+  "edge": {
+    "overhead_ms": 70.95,
+    "ms_per_mb": 468.45,
+    "measured": true,
+    "r2": 0.966,
+    "samples": 45,
+    "single_photo_median_ms": 302.1,
+    "upload_mb_range": [
+      0.17,
+      7.38
+    ],
+    "detector": "SSDLite320_MobileNet_V3_Large (COCO 91 Classes) \u00b7 PyTorch \u00b7 CPU",
+    "device": "CPU",
+    "cpu_threads_limit": 2,
+    "host": "SAIRAM",
+    "cpu": "Intel(R) Core(TM) i7-14700KF",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "measured_at": "2026-10-25T12:46:41+00:00",
+    "proxy_for": "teammate laptop (edge-like, 2 CPU threads); measured on desktop i7-14700KF limited to 2 threads"
+  },
+  "local": {
+    "overhead_ms": 58.11,
+    "ms_per_mb": 361.88,
+    "measured": true,
+    "r2": 0.967,
+    "samples": 45,
+    "single_photo_median_ms": 239.7,
+    "upload_mb_range": [
+      0.17,
+      7.38
+    ],
+    "detector": "SSDLite320_MobileNet_V3_Large (COCO 91 Classes) \u00b7 PyTorch \u00b7 CPU",
+    "device": "CPU",
+    "cpu_threads_limit": 4,
+    "host": "SAIRAM",
+    "cpu": "Intel(R) Core(TM) i7-14700KF",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "measured_at": "2026-10-25T12:47:30+00:00",
+    "proxy_for": "presenter laptop (i5 10th gen); measured on desktop i7-14700KF limited to 4 threads - re-run on the laptop"
+  }
+}
