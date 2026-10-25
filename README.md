@@ -405,6 +405,9 @@ To rebuild the training dataset and its preprocessed splits, see [data/README.md
 | HTTP Method | Route | Description |
 |:---:|:---|:---|
 | `GET` | `/health` | Service liveness probe |
+| `GET` | `/api/nodes` | Edge/cloud node settings and live status (never includes API keys) |
+| `PUT` | `/api/nodes/{edge\|cloud}` | Save a node's URL, key and on/off switch (only from the computer running the backend) |
+| `POST` | `/api/nodes/{edge\|cloud}/test` | Test a node: reachable, key accepted, valid replies |
 | `GET` | `/api` | Service identification & route index |
 | `POST` | `/api/tasks/validate` | Schema validation for task payloads |
 | `POST` | `/api/simulation/evaluate` | Dynamic offloading simulation with live DQN inference |

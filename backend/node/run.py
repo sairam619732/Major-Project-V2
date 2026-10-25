@@ -67,18 +67,22 @@ def main():
     vpn = [(ip, vpn_name(ip)) for ip in addresses if vpn_name(ip)]
     lan = [ip for ip in addresses if not vpn_name(ip)]
     print(f"Offloading node ({tier}) listening on {host}:{port}")
-    if vpn:
+    if host in ("127.0.0.1", "localhost", "::1"):
+        print("  Listening on this computer only (NODE_HOST); other devices can't reach it.")
+    else:
         for ip, name in vpn:
             print(f"  Over the internet ({name}): put this in the main backend's .env")
             print(f"    {tier}_NODE_URL=http://{ip}:{port}")
+        if not vpn:
+            print("  No Radmin VPN or Tailscale address found, so only devices on this same network can reach this node.")
+        if lan:
+            print(f"  Same network only: {tier}_NODE_URL=http://{lan[0]}:{port}")
+            for ip in lan[1:]:
+                print(f"    (also http://{ip}:{port}, probably a virtual adapter)")
+    if not (os.getenv("NODE_API_KEY") or os.getenv("NODE_TOKEN")):
+        print("  No NODE_API_KEY set: anyone who can reach this address can use the node.")
     else:
-        print("  No Radmin VPN or Tailscale address found, so only devices on this same network can reach this node.")
-    if lan:
-        print(f"  Same network only: {tier}_NODE_URL=http://{lan[0]}:{port}")
-        for ip in lan[1:]:
-            print(f"    (also http://{ip}:{port}, probably a virtual adapter)")
-    if not os.getenv("NODE_TOKEN"):
-        print("  No NODE_TOKEN set: anyone who can reach this address can use the node.")
+        print("  API key set: callers must send it in the X-API-Key header.")
     sys.stdout.flush()  # show the address right away, even when output goes to a log file
     uvicorn.run("node.server:app", host=host, port=port, log_level="info")
 

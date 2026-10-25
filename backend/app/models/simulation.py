@@ -169,5 +169,11 @@ class SimulationExecuteResponse(BaseModel):
     batch_items: Optional[List[Dict[str, Any]]] = Field(default=None, description="Per-item or per-frame detailed breakdown")
     status: str = Field(default="SUCCESS", description="Task execution status: SUCCESS or FAILED")
     error_message: Optional[str] = Field(default=None, description="Failure description if failed")
+    # Where the task was meant to go and where it really ran (they differ after a fallback).
+    dqn_decision: Optional[str] = Field(default=None, description="The DQN's own top choice before availability checks")
+    executed_on: Optional[str] = Field(default=None, description="Tier that actually ran the task: LOCAL, EDGE or CLOUD")
+    execution_id: Optional[str] = Field(default=None, description="Unique ID sent to the remote node (idempotency key)")
+    accelerator: Optional[str] = Field(default=None, description="Hardware that ran detection, e.g. 'CPU' or 'GPU (NVIDIA ...)'")
+    routing_notes: List[str] = Field(default_factory=list, description="Why tiers were skipped or fell back, in order")
 
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSimulationState } from "@/lib/simulation/simulationState";
+import { ExecutionRouting } from "./ExecutionRouting";
 
 export function SimulationResultsPanel() {
   const {
@@ -76,6 +77,7 @@ export function SimulationResultsPanel() {
                   EXECUTED IN {executionDetails.execution_environment}
                 </span>
               </div>
+              <ExecutionRouting details={executionDetails} />
 
               {workloadType === "IMAGE" && executionDetails.annotated_image_base64 && (
                 <div className="relative group rounded-lg border border-white/[0.05] overflow-hidden bg-black/60 shadow-[0_0_20px_rgba(0,0,0,0.3)]">

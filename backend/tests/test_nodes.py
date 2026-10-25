@@ -58,10 +58,16 @@ class TestNodeServer(unittest.TestCase):
 
         server.NODE_TOKEN = "test-key"
         try:
-            self.assertEqual(self.client.get("/health").status_code, 200)  # health stays open
+            # Every endpoint, health included, needs the key once one is set.
+            self.assertEqual(self.client.get("/health").status_code, 401)
             self.assertEqual(self.client.get("/status").status_code, 401)
-            self.assertEqual(self.client.get("/status", headers={"X-Node-Token": "wrong"}).status_code, 401)
+            self.assertEqual(self.client.get("/status", headers={"X-API-Key": "wrong"}).status_code, 401)
+            self.assertEqual(self.client.get("/health", headers={"X-API-Key": "test-key"}).status_code, 200)
+            self.assertEqual(self.client.get("/status", headers={"X-API-Key": "test-key"}).status_code, 200)
+            # Older backends send X-Node-Token; still accepted.
             self.assertEqual(self.client.get("/status", headers={"X-Node-Token": "test-key"}).status_code, 200)
+            # The key never appears in a refusal.
+            self.assertNotIn("test-key", self.client.get("/status", headers={"X-API-Key": "nope"}).text)
         finally:
             server.NODE_TOKEN = ""
 
@@ -94,6 +100,91 @@ class TestNodeMonitor(unittest.TestCase):
         state = monitor.live_state("edge")
         self.assertIsNotNone(state)
         self.assertEqual((state.cpu_load, state.task_queue, state.network_latency, state.bandwidth), (37.5, 3, 4.2, 0.18))
+
+
+class TestWorkerContract(unittest.TestCase):
+    """Task IDs, replay instead of re-running, status lookup, and the busy limit."""
+
+    def setUp(self):
+        import node.server as server
+
+        self.server = server
+        self.client = TestClient(node_app)
+        server._tasks.clear()
+
+    def run_task(self, task_id):
+        return self.client.post(
+            "/execute",
+            files=[("files", ("a.jpg", SAMPLE_IMAGE.read_bytes(), "image/jpeg"))],
+            data={"workload_type": "IMAGE", "task_id": task_id},
+        )
+
+    def test_same_task_id_runs_once(self):
+        from unittest import mock
+
+        real = self.server.cv_executor.process_workload
+        with mock.patch.object(self.server.cv_executor, "process_workload", side_effect=real) as spy:
+            first = self.run_task("t-unique-1").json()
+            second = self.run_task("t-unique-1").json()
+        self.assertEqual(spy.call_count, 1)
+        self.assertFalse(first["replayed"])
+        self.assertTrue(second["replayed"])
+        self.assertEqual(first["detection_count"], second["detection_count"])
+
+    def test_status_lookup(self):
+        self.assertEqual(self.client.get("/tasks/never-sent").status_code, 404)
+        self.run_task("t-lookup")
+        body = self.client.get("/tasks/t-lookup").json()
+        self.assertEqual(body["status"], "done")
+        self.assertEqual(body["result"]["task_id"], "t-lookup")
+
+    def test_running_task_is_not_started_again(self):
+        self.server._tasks["t-running"] = self.server.TaskRecord(status="running")
+        res = self.run_task("t-running")
+        self.assertEqual(res.status_code, 409)
+
+    def test_busy_node_refuses_without_recording(self):
+        from unittest import mock
+
+        with mock.patch.object(self.server, "_in_flight", self.server.MAX_QUEUE):
+            res = self.run_task("t-busy")
+        self.assertEqual(res.status_code, 503)
+        self.assertNotIn("t-busy", self.server._tasks)
+
+    def test_bad_task_id_rejected(self):
+        self.assertEqual(self.run_task("bad id with spaces").status_code, 400)
+
+    def test_result_reports_hardware_and_constraints(self):
+        body = self.run_task("t-hw").json()
+        self.assertIn(body["accelerator"], ("CPU",) + (("GPU (" + (self.server.cv_executor.hardware()["gpu_name"] or "") + ")"),))
+        self.assertEqual(body["constraints"]["max_concurrent"], self.server.MAX_CONCURRENT)
+        status_body = self.client.get("/status").json()
+        self.assertIn("used_for_detection", status_body["gpu"])
+        # GPU use is reported only when the detector really runs on it.
+        self.assertEqual(status_body["gpu"]["used_for_detection"], body["accelerator"] != "CPU")
+
+
+class TestEdgeLikeProfile(unittest.TestCase):
+    """NODE_PROFILE=edge-like imposes 1 task at a time, a queue of 3 and 2 detector CPU threads."""
+
+    def test_constraints_are_applied(self):
+        import json
+        import os
+        import subprocess
+        import sys
+
+        code = (
+            "import json, torch, node.server as s;"
+            "print(json.dumps({'c': s._constraints(), 'torch_threads': torch.get_num_threads()}))"
+        )
+        env = {**os.environ, "NODE_PROFILE": "edge-like", "DETECTOR_DEVICE": "cpu"}
+        env.pop("DETECTOR_CPU_THREADS", None)
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env,
+                             cwd=Path(__file__).resolve().parents[1], timeout=180)
+        data = json.loads(out.stdout.strip().splitlines()[-1])
+        self.assertEqual(data["c"], {"profile": "edge-like", "max_concurrent": 1, "max_queue": 3, "cpu_threads": 2})
+        # The thread cap is really applied to PyTorch, not just reported.
+        self.assertEqual(data["torch_threads"], 2)
 
 
 class TestNodeLimits(unittest.TestCase):

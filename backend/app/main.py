@@ -57,7 +57,7 @@ app.add_middleware(
     # Any port on this machine too: `next dev` moves to 3001, 3002, ... when 3000 is taken.
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
     allow_headers=["*"],
     # Chrome asks before a public site (the Vercel web app) may call a server on this computer;
     # this answers its private-network preflight for the origins allowed above.

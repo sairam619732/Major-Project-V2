@@ -75,6 +75,15 @@ export interface SimulationExecutionResult {
   summary?: string;
   // Phase 14: Real Task Execution & Offloaded Metrics
   execution_worker?: string;
+  /** The DQN's own top choice; executed_on is where the task really ran (they differ after a fallback). */
+  dqn_decision?: "LOCAL" | "EDGE" | "CLOUD";
+  executed_on?: "LOCAL" | "EDGE" | "CLOUD";
+  /** Unique ID sent to the remote node, so a retry never runs the task twice there. */
+  execution_id?: string | null;
+  /** Hardware that ran detection: "CPU", or "GPU (…)" only when the GPU was really used. */
+  accelerator?: string | null;
+  /** Why tiers were skipped or fell back, in order. */
+  routing_notes?: string[];
   workload_type?: string;
   input_size_mb?: number;
   processing_time_ms?: number;
@@ -127,6 +136,22 @@ export interface NodeTelemetry {
   network_emulation?: { rtt_ms: number; jitter_ms: number; bandwidth_mbps: number | null } | null;
   network_latency_ms: number | null;
   bandwidth_gbps: number | null;
+  /** The node's detector and the hardware it runs on, e.g. "… · PyTorch · GPU (NVIDIA GeForce RTX 5070)". */
+  detector?: string | null;
+  /** What the node's host can run: video needs ffmpeg; some hosts cap upload size (Vercel: 4.5 MB). */
+  video_supported?: boolean | null;
+  max_upload_mb?: number | null;
+  /** Switched on in the settings (a node can be set up but disabled). */
+  enabled?: boolean;
+  /** Whether an API key is saved. The key itself is never sent to the browser. */
+  has_api_key?: boolean;
+  /** Where the settings come from: backend/.env, the Configuration page, or nothing. */
+  source?: "env" | "settings" | "none";
+  tasks_running?: number | null;
+  /** Limits the node imposes on itself (configured, not measured). */
+  constraints?: { profile: string; max_concurrent: number; max_queue: number; cpu_threads: number | null } | null;
+  /** used_for_detection is true only when the node's detector really runs on the GPU. */
+  gpu?: { available: boolean | null; name: string | null; used_for_detection: boolean } | null;
   last_seen: number | null;
   error: string | null;
 }
@@ -154,6 +179,73 @@ export function nodeSource(node: NodeTelemetry | null | undefined): "live" | "of
 export function linkSource(node: NodeTelemetry | null | undefined): "live" | "emu" | "offline" | "sim" {
   const source = nodeSource(node);
   return source === "live" && node?.network_emulation ? "emu" : source;
+}
+
+export type NodeTier = "edge" | "cloud";
+
+/** Result of POST /api/nodes/{tier}/test. Never contains the API key. */
+export interface NodeConnectionTest {
+  url: string;
+  reachable: boolean;
+  authenticated: boolean;
+  online: boolean;
+  http_status?: number;
+  latency_ms?: number;
+  tier?: "EDGE" | "CLOUD";
+  node_id?: string | null;
+  cpu_load?: number | null;
+  memory_used?: number | null;
+  task_queue?: number | null;
+  model_ready?: boolean | null;
+  gpu?: NodeTelemetry["gpu"];
+  constraints?: NodeTelemetry["constraints"];
+  detector?: string | null;
+  error?: string;
+}
+
+async function nodesRequest<T>(path: string, method: "PUT" | "POST", body: unknown, timeoutMs: number): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${getBackendBaseUrl()}/api/nodes/${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const detail = typeof data?.detail === "string" ? data.detail : `Request failed (${res.status})`;
+      throw new BackendApiError(detail, res.status);
+    }
+    return data as T;
+  } catch (err) {
+    if (err instanceof BackendApiError) throw err;
+    throw new BackendApiError(err instanceof DOMException && err.name === "AbortError" ? "The backend did not answer in time." : "The backend is not reachable.");
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Saves a node's settings in the backend on this computer. The key goes only to that backend
+ * (never stored in the browser); leave apiKey empty to keep the saved one.
+ */
+export function saveNodeSettings(
+  tier: NodeTier,
+  settings: { enabled: boolean; url: string | null; apiKey?: string; clearApiKey?: boolean }
+): Promise<NodeTelemetry> {
+  return nodesRequest<NodeTelemetry>(
+    tier,
+    "PUT",
+    { enabled: settings.enabled, url: settings.url || null, api_key: settings.apiKey || null, clear_api_key: Boolean(settings.clearApiKey) },
+    8000
+  );
+}
+
+/** Asks the backend to contact a node now (the typed URL/key, or the saved ones when left empty). */
+export function testNodeConnection(tier: NodeTier, settings: { url?: string; apiKey?: string }): Promise<NodeConnectionTest> {
+  return nodesRequest<NodeConnectionTest>(`${tier}/test`, "POST", { url: settings.url || null, api_key: settings.apiKey || null }, 20000);
 }
 
 /** Fetches the edge/cloud node telemetry measured by the backend. */

@@ -61,7 +61,7 @@ class TestRoutingAroundNodeLimits(unittest.TestCase):
         from app.api import simulation as sim
         from app.services.remote_nodes import NodeTelemetry
 
-        cloud = NodeTelemetry("CLOUD", url="https://cloud.example", online=True, max_upload_mb=0.01)
+        cloud = NodeTelemetry("CLOUD", url="https://cloud.example", online=True, max_upload_mb=0.01, rtt_ms=40.0, bandwidth_gbps=0.05)
         real_predict = sim.inference_service.predict
 
         def predict_cloud(**kwargs):

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from app.api.tasks import router as tasks_router
 from app.api.simulation import router as simulation_router
 from app.api.optimization import router as optimization_router
+from app.api.nodes import router as nodes_router
 
 api_router = APIRouter(prefix="/api")
 
@@ -38,6 +39,7 @@ async def api_root():
             "optimization_benchmark_report": "/api/optimization/benchmark-report",
             "optimization_evaluation_results": "/api/optimization/evaluation-results",
             "optimization_training_history": "/api/optimization/training-history",
+            "nodes": "/api/nodes",
         },
     }
 
@@ -45,5 +47,6 @@ async def api_root():
 api_router.include_router(tasks_router)
 api_router.include_router(simulation_router)
 api_router.include_router(optimization_router)
+api_router.include_router(nodes_router)
 
 __all__ = ["api_router"]

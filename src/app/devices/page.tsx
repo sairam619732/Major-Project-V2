@@ -27,7 +27,13 @@ function TierCard({ tier, title, accent }: { tier: "edge" | "cloud"; title: stri
   const lines =
     source === "live" && node
       ? {
-          left: [`Node: ${node.node_id ?? "—"}`, `Platform: ${node.platform ?? "—"}`, `Endpoint: ${node.url}`],
+          left: [
+            `Node: ${node.node_id ?? "—"}`,
+            `Platform: ${node.platform ?? "—"}`,
+            `Endpoint: ${node.url}`,
+            // Which hardware runs detection there (e.g. the cloud desktop's GPU).
+            `Detector: ${node.detector?.split(" · ").slice(1).join(" · ") || "—"}`,
+          ],
           right: [
             `CPU: ${node.cpu_load}% of ${node.cpu_count} cores`,
             `Memory: ${node.memory_used}% of ${node.memory_total_gb} GB`,

@@ -1,6 +1,7 @@
 "use client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSimulationState } from "@/lib/simulation/simulationState";
+import { RemoteNodeSettings } from "@/components/settings/RemoteNodeSettings";
 
 export default function ConfigurationPage() {
   const { state } = useSimulationState();
@@ -9,10 +10,13 @@ export default function ConfigurationPage() {
     <DashboardLayout>
        <div className="flex flex-col gap-2 mb-6">
           <h1 className="text-3xl font-bold font-sans tracking-tight holo-title">Configuration</h1>
-          <p className="text-[14px] text-slate-400">Current simulation and agent parameters</p>
+          <p className="text-[14px] text-slate-400">Remote nodes, current simulation and agent parameters</p>
        </div>
        
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+         {/* Optional edge/cloud nodes: URL, API key, test, live status */}
+         <RemoteNodeSettings />
+
          {/* Environment Config */}
          <div className="p-6 holo-panel border rounded-xl flex flex-col gap-4">
            <h2 className="text-[14px] font-bold text-slate-200 font-sans uppercase border-b border-white/[0.05] pb-2">Environment State</h2>
@@ -88,21 +92,22 @@ export default function ConfigurationPage() {
                 <span className="font-mono text-[13px] text-slate-200">3 (LOCAL, EDGE, CLOUD)</span>
               </div>
               
-              <div className="flex flex-col gap-2">
-                <span className="text-[11px] font-mono text-slate-500 uppercase">Alpha (Latency Weight)</span>
-                <span className="font-mono text-[13px] text-slate-200">0.5</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-[11px] font-mono text-slate-500 uppercase">Beta (Energy Weight)</span>
-                <span className="font-mono text-[13px] text-slate-200">0.3</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-[11px] font-mono text-slate-500 uppercase">Gamma (Cost Weight)</span>
-                <span className="font-mono text-[13px] text-slate-200">0.2</span>
-              </div>
+              {/* Defaults of RewardWeights in backend/app/ml/config.py (the trained model's weights) */}
+              {[
+                ["Latency weight", "0.35"],
+                ["Energy weight", "0.25"],
+                ["Cost weight", "0.15"],
+                ["Queue weight", "0.10"],
+                ["Deadline penalty weight", "0.15"],
+              ].map(([label, value]) => (
+                <div key={label} className="flex flex-col gap-2">
+                  <span className="text-[11px] font-mono text-slate-500 uppercase">{label}</span>
+                  <span className="font-mono text-[13px] text-slate-200">{value}</span>
+                </div>
+              ))}
            </div>
            <p className="text-[11px] font-mono text-slate-500 mt-2">
-             Note: Reward weights are fixed for the trained model. To modify these weights, retrain the DQN model on the backend using the dataset page.
+             Note: these weights are fixed for the trained model. To change them, set REWARD_WEIGHT_* in backend/.env and retrain from the command line (python -m app.ml.train in backend/).
            </p>
          </div>
 

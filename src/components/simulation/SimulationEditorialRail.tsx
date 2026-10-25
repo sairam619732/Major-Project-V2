@@ -9,6 +9,7 @@
 
 import { useRef } from "react";
 import { useSimulationState } from "@/lib/simulation/simulationState";
+import { ExecutionRouting } from "./ExecutionRouting";
 import { SCENARIO_PRESETS } from "@/lib/simulation/simulationPresets";
 import { WorkloadLevel, NetworkConditionLevel } from "@/lib/simulation/simulationTypes";
 
@@ -1090,6 +1091,7 @@ export function SimulationBottomResultStrip() {
                 EXECUTED IN {executionDetails.execution_environment}
               </span>
             )}
+            {executionDetails && <ExecutionRouting details={executionDetails} />}
             {executionDetails?.execution_worker && (
               <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-400/50 text-cyan-200">
                 WORKER: {executionDetails.execution_worker}

@@ -1,8 +1,8 @@
 import time
+import uuid
 import json
 import platform
 from typing import Optional, Any, List, Tuple
-import httpx
 import psutil
 from fastapi import APIRouter, status, UploadFile, File, Form, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -18,7 +18,7 @@ from app.models.simulation import (
 from app.models.system import LocalNodeState, EdgeNodeState, CloudNodeState
 from app.services.evaluator import evaluate_simulation
 from app.services.cv_executor import cv_executor
-from app.services.remote_nodes import node_monitor
+from app.services.remote_nodes import RemoteTaskError, node_monitor
 from app.services.workload_limits import WorkloadError, check_workload, max_file_bytes, read_upload
 from app.ml.inference import inference_service
 from app.ml.environment import compute_action_metrics
@@ -368,48 +368,62 @@ async def execute_simulation_task(
         "CLOUD": raw_q_values.get("cloud", 0.0),
     }
 
-    # A node that is offline, or that can't run this task (e.g. a video on a host without ffmpeg,
-    # or an upload over its size limit), doesn't get it: use the best remaining tier.
-    routing_note = None
-    unavailable = {}
+    # STEP E: Choose where it runs. Local is the default and always available. An edge/cloud tier is
+    # eligible only when its node is enabled, live (answering, with measured latency/bandwidth) and able
+    # to run this task. The DQN's own choice is tried first; if it isn't eligible or fails, the other
+    # eligible tiers follow in order of the DQN's Q-values, with LOCAL as the last resort.
+    dqn_decision = decision
+    routing_notes: List[str] = []
+    unavailable: dict = {}
     for tier, key in (("EDGE", "edge"), ("CLOUD", "cloud")):
-        if node_monitor.is_unavailable(key):
-            unavailable[tier] = f"the {key} node is offline"
+        node = node_monitor.nodes[key]
+        if not node.url:
+            unavailable[tier] = f"no {key} node is set up"
+        elif not node.enabled:
+            unavailable[tier] = f"the {key} node is disabled"
+        elif not node_monitor.is_live(key):
+            unavailable[tier] = f"the {key} node is offline" if not node.online else f"the {key} node is still being measured"
         elif reason := node_monitor.cannot_run(key, w_type, total_bytes):
             unavailable[tier] = reason
-    if decision in unavailable:
-        chosen = max((t for t in ("LOCAL", "EDGE", "CLOUD") if t not in unavailable), key=lambda t: q_values[t])
-        routing_note = f"DQN chose {decision}, but {unavailable[decision]}, so the task ran on {chosen}."
-        decision = chosen
-        action_idx = {"LOCAL": 0, "EDGE": 1, "CLOUD": 2}[chosen]
+    if dqn_decision in unavailable:
+        routing_notes.append(f"DQN chose {dqn_decision}, but {unavailable[dqn_decision]}.")
+    order = [dqn_decision] + sorted((t for t in ("LOCAL", "EDGE", "CLOUD") if t != dqn_decision), key=lambda t: -q_values[t])
+    # LOCAL is never unavailable, so the walk always ends there at the latest; tiers the DQN ranks
+    # below LOCAL are never tried.
+    candidates = [t for t in order if t not in unavailable]
+    # Unique per execution: the remote node uses it to refuse running the same task twice.
+    execution_id = f"exec-{uuid.uuid4().hex}"
 
-    # STEP E: Execute. A live edge/cloud node runs the task itself over the network; a tier with no
-    # node configured is simulated: the task runs here and its network/queue costs come from the cost model.
-    remote_key = {"EDGE": "edge", "CLOUD": "cloud"}.get(decision)
     remote_res = None
-    if remote_key and node_monitor.is_live(remote_key):
+    decision = "LOCAL"
+    for tier in candidates:
+        if tier == "LOCAL":
+            break
+        remote_key = tier.lower()
         try:
-            remote_res = await node_monitor.execute(remote_key, files_data, w_type, actual_task_id)
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == status.HTTP_400_BAD_REQUEST:
-                # The node rejected the task itself (e.g. no ffmpeg there): report it, don't retry locally.
-                try:
-                    detail = exc.response.json().get("detail", "The node could not process this task.")
-                except ValueError:
-                    detail = "The node could not process this task."
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{decision} node: {detail}")
-            routing_note = f"The {decision.lower()} node failed ({type(exc).__name__}), so the task ran locally."
-        except Exception as exc:
-            routing_note = f"The {decision.lower()} node failed ({type(exc).__name__}), so the task ran locally."
+            remote_res = await node_monitor.execute(remote_key, files_data, w_type, execution_id)
+            decision = tier
+            break
+        except RemoteTaskError as exc:
+            if exc.kind == "rejected":
+                # The task itself is invalid there (e.g. a format the node can't read): report it.
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{tier} node: {exc}")
+            routing_notes.append(f"{tier} was tried, but {exc}.")
+    action_idx = {"LOCAL": 0, "EDGE": 1, "CLOUD": 2}[decision]
+    if decision != dqn_decision or routing_notes:
+        routing_notes.append(f"The task ran on {decision}.")
 
+    # STEP F: Execute. A remote node ran it over the network; otherwise it runs here, for real.
     if remote_res is not None:
         workload_res = remote_res
-        exec_worker = remote_res.get("node_id") or f"{remote_key}-node"
+        exec_worker = remote_res.get("node_id") or f"{decision.lower()}-node"
         exec_env = f"{decision} ({exec_worker})"
         env_desc = (
             f"Sent over the network to the {decision.lower()} node and run there. "
             "Latency is measured end to end, including the upload."
         )
+        if remote_res.get("replayed"):
+            routing_notes.append("The node returned its recorded result for this execution ID (it was not run twice).")
         processing_time_ms = remote_res["processing_time_ms"]
         total_latency_ms = remote_res["round_trip_ms"]
         network_transfer_ms = round(max(0.0, total_latency_ms - remote_res.get("server_elapsed_ms", processing_time_ms)), 2)
@@ -425,23 +439,19 @@ async def execute_simulation_task(
         except WorkloadError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
         except Exception as exc:
+            # Local execution failed too: an error, never a reported success.
+            tried = " ".join(routing_notes)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Object detection failed: {type(exc).__name__}: {exc}"[:300],
+                detail=f"Object detection failed on this machine: {type(exc).__name__}: {exc}. {tried}"[:400],
             )
         exec_worker = "local-host-device"
-        if decision == "LOCAL" or routing_note:
-            exec_env = "LOCAL (On-Device CPU)"
-            env_desc = "Executed locally on device without network transmission. Measured real neural inference compute."
-        else:
-            exec_env = f"LOCAL HOST ({decision} tier simulated)"
-            env_desc = (
-                f"DQN selected {decision}. No {decision.lower()} node is configured, so the workload ran "
-                f"in-process on the local host; {decision} network and queueing costs are estimated by the cost model."
-            )
+        exec_env = f"LOCAL ({workload_res.get('accelerator') or 'CPU'} on this device)"
+        env_desc = "Executed on this device without network transmission. Measured real neural inference compute."
         processing_time_ms = workload_res["processing_time_ms"]
         network_transfer_ms = 0.0
         total_latency_ms = processing_time_ms
+    routing_note = " ".join(routing_notes) or None
     if routing_note:
         env_desc = f"{routing_note} {env_desc}"
     detections = workload_res["detections"]
@@ -504,7 +514,8 @@ async def execute_simulation_task(
         execution_environment=exec_env,
         environment_description=env_desc,
         # True only when EDGE/CLOUD was chosen but no node exists, so its costs come from the cost model.
-        is_simulated_distributed=action_idx != 0 and remote_res is None and routing_note is None,
+        # Never true any more: a tier without a live node is not run "simulated" on this machine.
+        is_simulated_distributed=False,
         detections=formatted_detections,
         detection_count=len(formatted_detections),
         annotated_image_base64=annotated_b64,
@@ -523,6 +534,11 @@ async def execute_simulation_task(
         summary=eval_response.summary,
         # Phase 14 Execution Architecture Metrics
         execution_worker=exec_worker,
+        dqn_decision=dqn_decision,
+        executed_on=decision,
+        execution_id=execution_id if remote_res is not None or routing_notes else None,
+        accelerator=workload_res.get("accelerator"),
+        routing_notes=routing_notes,
         workload_type=w_type,
         input_size_mb=total_size_mb,
         processing_time_ms=processing_time_ms,

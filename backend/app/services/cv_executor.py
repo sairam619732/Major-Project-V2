@@ -26,32 +26,63 @@ ONNX_MODEL = Path(__file__).resolve().parents[1] / "ml" / "checkpoints" / "ssdli
 ONNX_LABELS = ONNX_MODEL.with_name("ssdlite320_coco_labels.json")
 
 
+def _cpu_threads() -> Optional[int]:
+    """DETECTOR_CPU_THREADS: cap on CPU threads for detection (an imposed limit, e.g. for an edge-like node)."""
+    try:
+        value = int(os.getenv("DETECTOR_CPU_THREADS", "0") or 0)
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
 class _TorchEngine:
-    name = "PyTorch"
+    """PyTorch on the GPU when one is usable (e.g. the desktop cloud node's RTX card), else the CPU.
+    DETECTOR_DEVICE=auto | cpu | cuda (default auto)."""
 
     def __init__(self):
         import torch
         from torchvision.models.detection import SSDLite320_MobileNet_V3_Large_Weights, ssdlite320_mobilenet_v3_large
 
         self._torch = torch
+        choice = os.getenv("DETECTOR_DEVICE", "auto").strip().lower()
+        if choice == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("DETECTOR_DEVICE=cuda, but PyTorch has no usable CUDA GPU (CPU-only build?)")
+        use_cuda = choice == "cuda" or (choice == "auto" and torch.cuda.is_available())
+        self.device = torch.device("cuda" if use_cuda else "cpu")
+        self.gpu_available = bool(torch.cuda.is_available())
+        self.gpu_name = torch.cuda.get_device_name(0) if self.gpu_available else None
+        self.accelerator = f"GPU ({self.gpu_name})" if use_cuda else "CPU"
+        self.name = f"PyTorch · {self.accelerator}"
+        if _cpu_threads():
+            torch.set_num_threads(_cpu_threads())
+
         weights = SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
-        self.model = ssdlite320_mobilenet_v3_large(weights=weights).eval()
+        self.model = ssdlite320_mobilenet_v3_large(weights=weights).eval().to(self.device)
         self.transforms = weights.transforms()
         self.categories = weights.meta.get("categories", [])
+        if use_cuda:
+            # The first GPU run sets up CUDA kernels (seconds); do it now, not during the first task.
+            self(Image.new("RGB", (640, 480)))
 
     def __call__(self, img: Image.Image):
         with self._torch.no_grad():
-            out = self.model(self.transforms(img).unsqueeze(0))[0]
-        return out["boxes"].numpy(), out["scores"].numpy(), out["labels"].numpy()
+            out = self.model(self.transforms(img).unsqueeze(0).to(self.device))[0]
+        return out["boxes"].cpu().numpy(), out["scores"].cpu().numpy(), out["labels"].cpu().numpy()
 
 
 class _OnnxEngine:
-    name = "ONNX Runtime"
+    name = "ONNX Runtime · CPU"
+    accelerator = "CPU"
+    gpu_available = None  # not checked: this engine always runs on the CPU
+    gpu_name = None
 
     def __init__(self):
         import onnxruntime as ort
 
-        self.session = ort.InferenceSession(str(ONNX_MODEL), providers=["CPUExecutionProvider"])
+        options = ort.SessionOptions()
+        if _cpu_threads():
+            options.intra_op_num_threads = _cpu_threads()
+        self.session = ort.InferenceSession(str(ONNX_MODEL), sess_options=options, providers=["CPUExecutionProvider"])
         self.categories = json.loads(ONNX_LABELS.read_text(encoding="utf-8"))
 
     def __call__(self, img: Image.Image):
@@ -80,6 +111,8 @@ class ComputerVisionExecutor:
             self.engine = _load_engine()
             self.categories = self.engine.categories
             self.model_architecture = f"{MODEL_NAME} · {self.engine.name}"
+            # Hardware that actually runs detection, reported with every result.
+            self.accelerator = self.engine.accelerator
             self.is_loaded = True
             self.load_error = None
         except Exception as e:
@@ -87,6 +120,7 @@ class ComputerVisionExecutor:
             self.engine = None
             self.categories = []
             self.model_architecture = MODEL_NAME
+            self.accelerator = None
             self.is_loaded = False
             self.load_error = f"{type(e).__name__}: {e}"
 
@@ -324,6 +358,17 @@ class ComputerVisionExecutor:
             "processed_count": res.get("processed_count", 1),
             "batch_items": res.get("batch_items", []),
             "model_architecture": res.get("model_architecture", "SSDLite320_MobileNet_V3_Large"),
+            "accelerator": self.accelerator,
+        }
+
+    def hardware(self) -> Dict[str, Any]:
+        """What runs detection on this machine. gpu_available is None when the engine can't check."""
+        engine = self.engine
+        return {
+            "detector_device": self.accelerator,
+            "gpu_available": getattr(engine, "gpu_available", None),
+            "gpu_name": getattr(engine, "gpu_name", None),
+            "cpu_threads_limit": _cpu_threads(),
         }
 
 

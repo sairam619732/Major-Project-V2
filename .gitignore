@@ -49,6 +49,7 @@ __pycache__/
 *.so
 .venv/
 backend/.venv/
+.venv-*/
 env/
 venv/
 
@@ -59,3 +60,7 @@ venv/
 
 # Vercel project links (vercel link)
 .vercel
+
+# Access key of the desktop cloud node (backend/scripts/start_cloud_node.py)
+.cloud-node-token
+node_settings.json

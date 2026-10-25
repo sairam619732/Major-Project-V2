@@ -7,13 +7,16 @@ How to run EdgeOffload AI across three real machines for the presentation.
 | **WEB APP** | Vercel (free Hobby plan) | The Next.js site, opened in Chrome on your laptop | `https://edgeoffload-ai.vercel.app` |
 | **LOCAL** | Your laptop (i5 10th gen, 16 GB RAM, 256 GB SSD) | Backend (DQN, real local telemetry of this laptop) | `http://localhost:8000` |
 | **EDGE** | Teammate's laptop, anywhere with internet (joined by Radmin VPN) | Offloading node (PyTorch detector) | `http://26.x.x.x:8100` |
-| **CLOUD** | Vercel (free Hobby plan), Mumbai region | Offloading node (same detector on ONNX Runtime) | `https://<project>.vercel.app` |
+| **CLOUD** (main) | Your desktop (i7-14700KF, 32 GB, RTX 5070), joined by Radmin VPN | Offloading node, detector on the **GPU** (Part 5) | `http://26.x.x.x:8200` |
+| **CLOUD** (backup) | Vercel (free Hobby plan), Mumbai region | Offloading node (same detector on ONNX Runtime, CPU) | `https://edgeoffload-cloud.vercel.app` |
+
+Only one cloud is used at a time: the one in `CLOUD_NODE_URL` on your laptop.
 
 Your laptop's backend checks both nodes every 3 s (real latency, bandwidth, CPU load, queue), feeds those values to the DQN, and sends each task to the tier the DQN picks. A node that stops answering is shown **OFFLINE** and gets no tasks.
 
 The web app's pages come from Vercel, but they run in **your** browser and call the backend on **your** laptop (`localhost:8000`); that is why the local tier's readings are your laptop's. Someone opening the site on another computer sees "Backend offline" unless that computer runs the backend too.
 
-Do the parts in this order: **0 → 3 (cloud node) → 4 (web app) → 2 (teammate) → 1 (your laptop)**, because your laptop's settings need the other addresses. Parts 3 and 4 are already done.
+Do the parts in this order: **0 → 5 (desktop cloud) → 4 (web app) → 2 (teammate) → 1 (your laptop)**, because your laptop's settings need the other addresses. Parts 3 (Vercel cloud, backup) and 4 are already done.
 
 ---
 
@@ -30,7 +33,115 @@ The repository includes the trained DQN checkpoint and the ONNX detector (`backe
 
 ---
 
-## Part 3. Cloud node on Vercel (do this on the desktop)
+## Remote nodes: how they work, settings and keys
+
+**Local first.** The app needs no node and no key. With both nodes off (the default), the DQN still runs, every task runs on this computer, and results show *DQN chose … · ran on LOCAL*. Edge and cloud are optional workers you switch on.
+
+**Eligibility and fallback.** A tier is used only when its node is switched on, online, measured (latency + bandwidth) and able to run the task (video needs ffmpeg there; upload under its size limit). The DQN's own choice is tried first; if that tier isn't eligible or fails, the next tiers in the DQN's Q-value order are tried, ending at LOCAL at the latest. Every result reports `dqn_decision`, `executed_on`, `accelerator` (GPU only when the GPU really ran it) and `routing_notes` explaining any fallback. If local execution fails too, the request returns an error, never a success.
+
+**Settings page.** Configuration → *Remote compute nodes*: switch on/off, endpoint URL, API key, **Test connection**, and live status (latency, bandwidth, CPU, RAM, queue, GPU, imposed limits). Keys go from the browser only to the backend on the same computer (over the loopback interface; they never leave the machine), are never sent back to the browser, and are saved in **plain text** in `backend\node_settings.json` on that computer (not encrypted; ignored by git). Settings saved there override `backend\.env`. Only the computer running the backend can change them (requests from other devices get 403). Use `https://` node URLs over the internet.
+
+**Worker API** (`backend/node/server.py`; the same program for edge and cloud). Every endpoint needs the key in the `X-API-Key` header (compared in constant time; the older `X-Node-Token` header still works):
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | identity and readiness; the backend times it for latency |
+| `GET /status` | real CPU/RAM/queue (psutil), GPU, host limits, **imposed** constraints, network emulation |
+| `POST /echo` | bandwidth probe (counts bytes, max 4 MB) |
+| `POST /execute` | form `files`, `workload_type`, `task_id`: runs the fixed detection task; never runs code sent by a caller |
+| `GET /tasks/{task_id}` | status/result of a received task |
+
+Each execution gets a unique `task_id` from the backend. Sending the same ID again never runs the task twice: a finished task returns its recorded result (`replayed: true`), a running one answers 409. If a request times out after sending, the backend asks `GET /tasks/{id}` (for up to 30 s) instead of re-sending; if the node never received it, the task moves to the next tier; if it is still running there, the result says so and the task runs on the next tier. A full node answers 503 straight away so the backend can use another tier. Results are kept for 15 minutes in the worker's memory (on Vercel, per instance: a lookup can miss if Vercel routes it to another instance).
+
+**Edge-like profile.** `NODE_PROFILE=edge-like` makes a node behave like a constrained edge server: 1 task at a time, at most 3 accepted (running + waiting), detector limited to 2 CPU threads (override with `NODE_MAX_CONCURRENT`, `NODE_MAX_QUEUE`, `DETECTOR_CPU_THREADS`). These are **imposed** limits, reported separately (`constraints`) from the measured values. Such a node is an edge-like remote node, not a physical edge device. Memory limits are not enforced (not supported on Windows without extra tooling).
+
+**Environment variables**
+
+| Where | Variable | Meaning |
+| --- | --- | --- |
+| backend (`backend\.env`) | `EDGE_NODE_URL`, `CLOUD_NODE_URL` | node base URLs (or set them on the Configuration page) |
+| backend | `EDGE_NODE_API_KEY`, `CLOUD_NODE_API_KEY` | each node's key (old names `*_NODE_TOKEN` work too) |
+| backend | `FRONTEND_URL` | the hosted web app allowed to call this backend (default `https://edgeoffload-ai.vercel.app`) |
+| backend | `BANDWIDTH_PROBE_MB`, `BANDWIDTH_PROBE_INTERVAL_S` | lighter bandwidth test on metered links |
+| worker | `NODE_TIER` (`EDGE`/`CLOUD`), `NODE_ID`, `NODE_PORT`, `NODE_HOST` | identity and address |
+| worker | `NODE_API_KEY` (old name `NODE_TOKEN`), `NODE_REQUIRE_API_KEY=1` | access key; refuse everything until one is set |
+| worker | `NODE_PROFILE=edge-like`, `NODE_MAX_CONCURRENT`, `NODE_MAX_QUEUE`, `DETECTOR_CPU_THREADS` | imposed limits |
+| worker | `DETECTOR_DEVICE` (`auto`/`cpu`/`cuda`), `DETECTOR_ENGINE` (`auto`/`torch`/`onnx`) | detector hardware/engine |
+| worker | `NODE_MAX_UPLOAD_MB` | host upload limit (4 on Vercel) |
+| Vercel cloud worker | `NODE_TOKEN` (secret) | its key; `index.py` sets the rest |
+| Vercel web app | none | the site has no secrets; it calls `http://localhost:8000` from the browser |
+
+**Separate keys.** Make one key per worker (run in `backend`):
+```powershell
+.\.venv\Scripts\python.exe -c "import secrets; print('edge:', secrets.token_urlsafe(32)); print('cloud:', secrets.token_urlsafe(32))"
+```
+Set the edge one as `NODE_API_KEY` on the edge worker and in the Configuration page (or `EDGE_NODE_API_KEY`); the cloud one likewise. Never commit them or paste them into chats.
+
+**Start a worker** (in `backend`, PowerShell):
+```powershell
+# Edge-like worker (e.g. the teammate's laptop)
+$env:NODE_TIER="EDGE"; $env:NODE_PROFILE="edge-like"; $env:NODE_API_KEY="<edge key>"
+.\.venv\Scripts\python.exe -m node.run
+# Cloud worker on the desktop (GPU); creates/uses backend\.cloud-node-token as its key
+.\.venv-gpu\Scripts\python.exe scripts\start_cloud_node.py
+```
+
+**HTTPS address without a VPN: Cloudflare quick tunnel** (temporary, for testing). On the worker's machine, in a second window:
+```powershell
+winget install Cloudflare.cloudflared
+cloudflared tunnel --url http://localhost:8100   # 8200 for the cloud worker
+```
+It prints `https://<random>.trycloudflare.com`: paste that into the node's URL on the Configuration page and press **Test connection**. The address changes every time the tunnel restarts; update it on the page (no code change needed). Quick tunnels are meant for testing and carry no uptime guarantee.
+
+**Test local-only operation**
+1. Configuration → switch both nodes **off** (or leave them unset).
+2. Simulation → run a task (e.g. the TRAFFIC sample). The result shows *ran on LOCAL* with real detections and time.
+3. Or from PowerShell, with the backend running:
+   ```powershell
+   curl.exe -F "files=@public\samples\traffic_monitoring.jpg" http://127.0.0.1:8000/api/simulation/execute
+   ```
+
+---
+
+## Part 5. Cloud node on your desktop (GPU, recommended)
+
+Your desktop (i7-14700KF, 32 GB RAM, RTX 5070 12 GB) is the most powerful machine, as a real cloud would be. It runs the same node as the edge, with the detector on the GPU, and your laptop reaches it over the internet through **Radmin VPN** (the same virtual network as the edge).
+
+### Install (once, on the desktop)
+
+The desktop already has the project in `C:\Users\saira\.gemini\config\Major Project V2`. The GPU needs the CUDA build of PyTorch, kept in its own environment (`backend\.venv-gpu`, about 5 GB) so the normal one stays as it is:
+```powershell
+cd "C:\Users\saira\.gemini\config\Major Project V2\backend"
+python -m venv .venv-gpu
+.\.venv-gpu\Scripts\python.exe -m pip install --upgrade pip
+.\.venv-gpu\Scripts\python.exe -m pip install torch==2.14.0 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu130
+.\.venv-gpu\Scripts\python.exe -m pip install -r requirements.txt
+```
+(`cu130` = CUDA 13.0. The RTX 5070 needs CUDA 12.8 or newer, and the NVIDIA driver must be recent, e.g. 621.)
+
+Install **Radmin VPN** on the desktop and **join the same network** as the two laptops (Part 2, Option A). Then allow the cloud port for the VPN only (PowerShell **as administrator**):
+```powershell
+New-NetFirewallRule -DisplayName "EdgeOffload cloud node (VPN)" -Direction Inbound -Protocol TCP -LocalPort 8200 -Action Allow -Profile Any -RemoteAddress 26.0.0.0/8,100.64.0.0/10
+```
+
+### Start (every time)
+
+```powershell
+cd "C:\Users\saira\.gemini\config\Major Project V2\backend"
+.\.venv-gpu\Scripts\python.exe scripts\start_cloud_node.py
+```
+It prints the detector (it should say **GPU (NVIDIA GeForce RTX 5070)**) and the address, e.g. `CLOUD_NODE_URL=http://26.x.x.x:8200`. The first run creates an access key in `backend\.cloud-node-token`; put the same value in `CLOUD_NODE_TOKEN` on your laptop. Keep the window open and the desktop awake while presenting.
+
+On your laptop's `backend\.env`:
+```
+CLOUD_NODE_URL=http://26.x.x.x:8200
+CLOUD_NODE_TOKEN=<the contents of .cloud-node-token on the desktop>
+```
+To switch back to the Vercel cloud, put the Vercel address and key (Part 3) there instead.
+
+---
+
+## Part 3. Cloud node on Vercel (backup; done from the desktop)
 
 ### What runs where, and the limits
 
@@ -46,7 +157,7 @@ Vercel runs Python as serverless functions. PyTorch is too large for them, so th
 ### Status: deployed
 
 The cloud node is live at **https://edgeoffload-cloud.vercel.app** (Vercel project `edgeoffload-cloud`, account `sairam619732`, region Mumbai `bom1`), deployed from the desktop with Vercel CLI 65.2.0. Checked after deploying:
-- `/health` answers `{"status":"ok","tier":"CLOUD","node_id":"cloud-vercel","model_ready":true}`.
+- `/health` with the key answers `{"status":"ok","tier":"CLOUD","node_id":"cloud-vercel","model_ready":true}`; without it, 401 (every endpoint needs the key since the update of 2026-10-25).
 - `/status` without the key, or with a wrong key, answers `401`.
 - A detection task on the traffic sample finds the same 4 objects as PyTorch, in about 160–210 ms of compute.
 - The backend shows it **online** at about 47 ms latency from the desktop. The first probe after it has been idle can time out while Vercel starts the instance; it recovers on its own.
@@ -78,7 +189,7 @@ The build keeps `dist\vercel-node\.vercel` (the link to the Vercel project), so 
    npx --yes vercel@65.2.0 deploy --prod --yes
    ```
    `login` prints a link: open it and click **Allow**. `link` writes a `.env.local` with a temporary Vercel token; delete it so it isn't uploaded. `env add` asks for the key: make one with `.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))"` (from `backend`) and put the same value in `CLOUD_NODE_TOKEN` on your laptop.
-4. Check `https://<project>.vercel.app/health` in a browser. If a Vercel login page appears instead, turn off **Settings → Deployment Protection → Vercel Authentication** for the project.
+4. Check it with **Test connection** on the Configuration page. In a browser, `https://<project>.vercel.app/health` shows *Missing or wrong API key*, which means it is running. If a Vercel login page appears instead, turn off **Settings → Deployment Protection → Vercel Authentication** for the project.
 
 What the deploy folder needs (already set in `backend/deploy/vercel/`): `vercel.json` with `"framework": "fastapi"` and the region, and `pyproject.toml` with the dependencies and `entrypoint = "index:app"`. Without the framework setting, Vercel builds nothing (404). Vercel installs dependencies from `pyproject.toml`, not from a `requirements.txt` next to it.
 
@@ -218,7 +329,7 @@ CLOUD_NODE_URL=https://edgeoffload-cloud.vercel.app
 CLOUD_NODE_TOKEN=paste-the-key-here
 ```
 
-Before presenting, check that your laptop can reach the edge: with Radmin VPN connected, open `http://26.x.x.x:8100/health` (the teammate's address) in your browser. If it doesn't load, see Troubleshooting.
+Before presenting, check that your laptop can reach the edge: with Radmin VPN connected, press **Test connection** on the Configuration page (or open `http://26.x.x.x:8100/health`: *Missing or wrong API key* means it is reachable). If it fails, see Troubleshooting.
 
 ### Start (every time)
 
@@ -251,8 +362,8 @@ Open **https://edgeoffload-ai.vercel.app/devices** in Chrome. The first time, Ch
 
 1. Both laptops online, with Radmin VPN open and **both shown in the same network**.
 2. Teammate: start the edge node. The printed Radmin address should match `EDGE_NODE_URL` in your `backend\.env`.
-3. You: open `http://26.x.x.x:8100/health` once to check the edge answers.
-4. Open `https://edgeoffload-cloud.vercel.app/health` once to wake the cloud node.
+3. You: Configuration page → **Test connection** on both nodes (Connected).
+4. If you use the Vercel cloud: its first request after a while is slow (it starts up); the Test connection wakes it.
 5. You: `npm run present:backend`. Both nodes **online** in the printout. Open https://edgeoffload-ai.vercel.app/devices in Chrome (allow local network access if asked): all three tiers **LIVE**.
 6. Run one test task on `/simulation` before the audience arrives.
 
@@ -266,7 +377,7 @@ Open **https://edgeoffload-ai.vercel.app/devices** in Chrome. The first time, Ch
 | Radmin VPN shows the teammate as connected through a relay, or latency is high | It still works, just slower: the two networks blocked a direct link, so traffic goes through Radmin's servers. Try another network (e.g. a phone hotspot), or Tailscale (Option B). |
 | EDGE error `401` | `EDGE_NODE_TOKEN` on your laptop doesn't match `NODE_TOKEN` on the teammate's laptop. |
 | Cloudflare tunnel stopped working | The `trycloudflare.com` address changes every restart: copy the new one into `EDGE_NODE_URL` and restart `npm run present`. |
-| CLOUD shows OFFLINE right after starting | The Vercel instance is starting up; it turns online within ~30 s. Opening https://edgeoffload-cloud.vercel.app/health in a browser first helps. |
+| CLOUD shows OFFLINE right after starting | The Vercel instance is starting up; it turns online within ~30 s. Pressing **Test connection** on the Configuration page first wakes it. |
 | CLOUD error `401` | `CLOUD_NODE_TOKEN` on your laptop doesn't match `NODE_TOKEN` in Vercel. |
 | CLOUD error `503` "no NODE_TOKEN set" | Add `NODE_TOKEN` in Vercel (Part 3, step 5) and deploy again. |
 | A task says "over the cloud node's 4 MB limit" | Expected: Vercel accepts at most 4.5 MB per request, so that task ran on another tier. |
@@ -280,6 +391,18 @@ Open **https://edgeoffload-ai.vercel.app/devices** in Chrome. The first time, Ch
 
 - **Real values:** local CPU, memory and battery (psutil on your laptop); each node's own CPU load, memory and task queue; latency and bandwidth measured by the backend over the real internet path every 3 s / 30 s. The edge is reached through Radmin VPN, a virtual network over the internet, so its latency includes that path.
 - **Same detector everywhere:** SSDLite320 MobileNetV3 with COCO weights. The cloud runs it on ONNX Runtime instead of PyTorch (Vercel's size limit), with identical results.
+- **The cloud is your desktop:** a remote, much more powerful machine (RTX 5070 GPU) reached over the internet, which is the role a cloud datacenter plays in this model. It isn't a commercial datacenter; the Vercel deployment (Part 3) shows the same node running on real cloud infrastructure.
 - **Vercel is serverless:** the cloud's CPU load and queue are those of the function instance that answered, and Vercel may run several instances. Treat them as approximate.
 - **The DQN currently sends almost every task to LOCAL**, even when the cost model says the edge would be cheaper. That is the trained policy's behaviour, not a deployment problem. The routing to edge and cloud is in place and tested.
 - **Offline or unsuitable nodes:** if the DQN picks a tier that is offline, or can't take the task (video without ffmpeg, upload over the size limit), the task runs on the best remaining tier and the result says why.
+
+## Known limitations
+
+- **The trained DQN rarely offloads.** With the nodes live it still chooses LOCAL for the sample tasks (its Q-values rank LOCAL first). Remote execution and fallback are verified by tests that force an EDGE/CLOUD choice against a real worker, not by the DQN choosing them on its own. Retraining with input ranges that match the real measurements would be needed.
+- **DQN inputs outside its training ranges.** Real bandwidths (e.g. 0.05–0.3 Gbps) are far below the simulator's training range (1–40 "Gbps"), and the measured round trip is used where the cost model expects one-way latency.
+- **Keys in plain text.** `backend\node_settings.json` and `backend\.env` are unencrypted files on the presenter's computer (ignored by git).
+- **No hard execution timeout on a worker.** A task that hangs inside the detector can't be killed; the backend stops waiting after 90 s + 30 s of status checks and runs the task on the next tier.
+- **Vercel cloud worker:** CPU only (ONNX Runtime), 4.5 MB per request, no video, results kept per instance (a status lookup can reach a different instance), cold starts of a few seconds; Hobby has monthly limits (1 M requests, 4 h CPU, 360 GB-h memory).
+- **Edge-like limits** cover concurrency, queue length and CPU threads; memory limits are not enforced.
+- **Shared machines.** When several tiers run on one computer (tests, single-laptop demo), they share its CPU/GPU, and their latency is a loopback or emulated link (labelled as such).
+- **The backend can't run on Vercel**: it reads the presenter's real hardware and keeps a monitoring loop running; it runs on the presenter's laptop.
